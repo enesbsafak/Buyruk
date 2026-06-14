@@ -2,7 +2,7 @@
 
 Buyruk, Windows için geliştirilmiş açık kaynak bir masaüstü çalışma alanı uygulamasıdır. Tek pencerede çoklu terminal, dosya gezgini ve Monaco tabanlı kod editörü sunar.
 
-İndirme: [v1.0.0 release](https://github.com/enesbsafak/Buyruk/releases/tag/v1.0.0)
+İndirme: [son Windows release](https://github.com/enesbsafak/Buyruk/releases/latest)
 
 ![Buyruk çalışma alanı ekran görüntüsü](docs/screenshot.png)
 
@@ -20,17 +20,19 @@ Güvenlik tarafında `contextIsolation: true` ve `nodeIntegration: false` kullan
 
 - CMD, PowerShell, Claude ve Codex oturumları.
 - Birden fazla terminal açıldığında otomatik grid yerleşimi.
-- Her terminal için arama, temizleme, yeniden başlatma ve zoom kontrolleri.
+- Her terminal için arama, yeniden başlatma ve zoom kontrolleri.
 - Broadcast modu ile girişi tüm terminallere aynı anda gönderme.
 - Aktif terminale hızlı prompt gönderme.
 - Oturumları ve son klasörleri kalıcı saklama.
+- Claude Code oturumlarında clipboard'da görsel varken `Ctrl+V` ile görsel yapıştırma.
 
 **Dosya gezgini**
 
 - Aktif terminal klasörüne bağlı dosya ağacı.
 - `fs.watch` ile klasör yenileme.
 - Git dal bilgisi ve dosya durum rozetleri.
-- Sağ tık menüsü: burada terminal aç, Explorer'da göster, yol kopyala, yeni dosya/klasör, yeniden adlandır, sil.
+- Git diff görüntüleme: değişmiş dosyalarda araç çubuğu veya sağ tık menüsüyle read-only `.diff` sekmesi açma.
+- Sağ tık menüsü: burada terminal aç, Git diff göster, Explorer'da göster, yol kopyala, yeni dosya/klasör, yeniden adlandır, sil.
 - `Ctrl+P` ile fuzzy dosya açma.
 
 **Kod editörü**
@@ -38,7 +40,7 @@ Güvenlik tarafında `contextIsolation: true` ve `nodeIntegration: false` kullan
 - Monaco Editor.
 - Sekmeli dosya açma.
 - `Ctrl+S` ile kaydetme.
-- Bul/değiştir, biçimlendir, kaydedilmiş sürümle diff görünümü.
+- Bul/değiştir, biçimlendir, kaydedilmiş sürümle diff görünümü ve Git diff sekmeleri.
 - Resim önizleme ve ikili/büyük dosya koruması.
 
 **Uygulama**
@@ -54,10 +56,12 @@ Güvenlik tarafında `contextIsolation: true` ve `nodeIntegration: false` kullan
 Hazır Windows installer için release sayfasındaki `.exe` dosyasını indir:
 
 ```text
-Buyruk-1.0.0-win-x64.exe
+Buyruk-1.0.5-win-x64.exe
 ```
 
 Installer henüz imzalı değildir. Bu yüzden Windows SmartScreen uyarısı gösterebilir.
+
+`v1.0.0`-`v1.0.3` arası bir sürüm kuruluysa, unsigned installer imza doğrulama ayarı nedeniyle otomatik güncelleme hata verebilir. Bu durumda son release installer'ını bir kez manuel kur; `v1.0.4` ve sonrası unsigned GitHub Release güncellemeleri aynı publisher doğrulama hatasına takılmadan ilerler.
 
 ## Geliştirme
 
