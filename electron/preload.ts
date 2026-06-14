@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { clipboard, contextBridge, ipcRenderer } from 'electron'
 import { IPC } from './ipcChannels'
 import type { AppUpdateStatus } from '../src/updateTypes'
 
@@ -58,6 +58,9 @@ const api = {
     root: string
   ): Promise<{ isRepo: boolean; branch: string; files: Record<string, string> }> =>
     ipcRenderer.invoke(IPC.GIT_STATUS, root),
+
+  // ---- Clipboard ----
+  clipboardHasImage: (): boolean => !clipboard.readImage().isEmpty(),
 
   // ---- Terminal ----
   createTerminal: (options: CreateTerminalOptions): Promise<TerminalSession> =>

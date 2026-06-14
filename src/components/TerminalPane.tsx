@@ -104,12 +104,29 @@ export function TerminalPane({
     const unsubscribe = terminalBus.subscribe(session.id, (data) => term.write(data))
     window.api.resizeTerminal(session.id, term.cols, term.rows)
 
-    // Ctrl/Cmd+F opens the in-terminal search bar.
+    // Ctrl/Cmd+F opens search. Ctrl/Cmd+V maps image clipboard paste to Claude Code's Alt+V.
     term.attachCustomKeyEventHandler((e) => {
-      if (e.type === 'keydown' && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+      const hasPrimaryModifier = e.ctrlKey || e.metaKey
+      const key = e.key.toLowerCase()
+
+      if (e.type === 'keydown' && hasPrimaryModifier && key === 'f') {
         setShowSearch(true)
         return false
       }
+
+      if (
+        e.type === 'keydown' &&
+        hasPrimaryModifier &&
+        !e.altKey &&
+        !e.shiftKey &&
+        key === 'v' &&
+        session.type === 'claude' &&
+        window.api.clipboardHasImage()
+      ) {
+        onInputRef.current(session.id, '\x1bv')
+        return false
+      }
+
       return true
     })
 
@@ -130,7 +147,7 @@ export function TerminalPane({
       resizeObserver.disconnect()
       term.dispose()
     }
-  }, [fontFamily, fontSize, session.id, session.gen])
+  }, [fontFamily, fontSize, session.id, session.gen, session.type])
 
   useEffect(() => {
     const term = termRef.current

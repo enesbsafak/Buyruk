@@ -28,6 +28,9 @@ declare global {
         root: string
       ): Promise<{ isRepo: boolean; branch: string; files: Record<string, string> }>
 
+      // Clipboard
+      clipboardHasImage(): boolean
+
       // Terminal
       createTerminal(options: CreateTerminalOptions): Promise<TerminalSession>
       restartTerminal(payload: CreateTerminalOptions & { id: string }): Promise<void>
