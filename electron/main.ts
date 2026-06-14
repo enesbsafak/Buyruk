@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, Menu } from 'electron'
 import path from 'node:path'
 import { existsSync } from 'node:fs'
+import log from 'electron-log/main'
 import { registerFileSystemHandlers } from './fileSystem'
 import { TerminalManager } from './terminalManager'
 import { IPC } from './ipcChannels'
@@ -10,6 +11,9 @@ import { registerUpdaterHandlers, startAutoUpdateCheck } from './updater'
 let mainWindow: BrowserWindow | null = null
 let allowClose = false
 const terminalManager = new TerminalManager()
+
+log.initialize()
+log.transports.file.level = 'info'
 
 function createWindow(): void {
   const saved = loadWindowState()

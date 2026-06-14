@@ -1,7 +1,12 @@
 import { app, type BrowserWindow, type IpcMain } from 'electron'
+import { rm } from 'node:fs/promises'
+import path from 'node:path'
 import { autoUpdater, type ProgressInfo, type UpdateInfo } from 'electron-updater'
+import log from 'electron-log/main'
 import { IPC } from './ipcChannels'
 import type { AppUpdateStatus } from '../src/updateTypes'
+
+const UPDATER_CACHE_DIR = 'buyruk-updater'
 
 let currentStatus: AppUpdateStatus = {
   state: 'idle',
@@ -15,6 +20,26 @@ const percent = (value: number | undefined): number | undefined =>
 
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error)
+
+const shortErrorMessage = (error: unknown): string => {
+  const message = errorMessage(error)
+  return message.length > 120 ? `${message.slice(0, 117)}...` : message
+}
+
+async function clearUpdaterCache(reason: string): Promise<void> {
+  const localAppData = process.env.LOCALAPPDATA
+  if (!localAppData) return
+
+  const cacheDir = path.join(localAppData, UPDATER_CACHE_DIR)
+  if (path.basename(cacheDir) !== UPDATER_CACHE_DIR) return
+
+  try {
+    await rm(cacheDir, { recursive: true, force: true })
+    log.info(`[updater] Cache temizlendi (${reason}): ${cacheDir}`)
+  } catch (error) {
+    log.warn('[updater] Cache temizlenemedi', error)
+  }
+}
 
 function emitStatus(
   getWindow: () => BrowserWindow | null,
@@ -36,6 +61,7 @@ function registerAutoUpdaterEvents(getWindow: () => BrowserWindow | null): void 
   if (listenersRegistered) return
   listenersRegistered = true
 
+  autoUpdater.logger = log
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
 
@@ -81,13 +107,40 @@ function registerAutoUpdaterEvents(getWindow: () => BrowserWindow | null): void 
   })
 
   autoUpdater.on('error', (error) => {
+    log.error('[updater] Hata', error)
     emitStatus(getWindow, {
       state: 'error',
-      message: 'Güncelleme kontrolü başarısız',
+      message: `Güncelleme hatası: ${shortErrorMessage(error)}`,
       version: app.getVersion(),
       error: errorMessage(error)
     })
   })
+}
+
+async function checkForUpdatesWithCacheRetry(
+  getWindow: () => BrowserWindow | null
+): Promise<AppUpdateStatus> {
+  await clearUpdaterCache('kontrol öncesi')
+
+  try {
+    await autoUpdater.checkForUpdates()
+    return currentStatus
+  } catch (firstError) {
+    log.warn('[updater] İlk kontrol başarısız, cache temizlenip tekrar denenecek', firstError)
+    await clearUpdaterCache('hata sonrası retry')
+
+    try {
+      await autoUpdater.checkForUpdates()
+      return currentStatus
+    } catch (secondError) {
+      return emitStatus(getWindow, {
+        state: 'error',
+        message: `Güncelleme hatası: ${shortErrorMessage(secondError)}`,
+        version: app.getVersion(),
+        error: errorMessage(secondError)
+      })
+    }
+  }
 }
 
 export function registerUpdaterHandlers(
@@ -107,18 +160,7 @@ export function registerUpdaterHandlers(
       })
     }
 
-    try {
-      await autoUpdater.checkForUpdates()
-    } catch (error) {
-      return emitStatus(getWindow, {
-        state: 'error',
-        message: 'Güncelleme kontrolü başarısız',
-        version: app.getVersion(),
-        error: errorMessage(error)
-      })
-    }
-
-    return currentStatus
+    return checkForUpdatesWithCacheRetry(getWindow)
   })
 
   ipcMain.on(IPC.UPDATE_INSTALL, () => {
@@ -132,10 +174,10 @@ export function startAutoUpdateCheck(getWindow: () => BrowserWindow | null): voi
   registerAutoUpdaterEvents(getWindow)
   if (!app.isPackaged) return
   setTimeout(() => {
-    autoUpdater.checkForUpdates().catch((error) => {
+    checkForUpdatesWithCacheRetry(getWindow).catch((error) => {
       emitStatus(getWindow, {
         state: 'error',
-        message: 'Güncelleme kontrolü başarısız',
+        message: `Güncelleme hatası: ${shortErrorMessage(error)}`,
         version: app.getVersion(),
         error: errorMessage(error)
       })
