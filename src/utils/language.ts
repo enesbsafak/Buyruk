@@ -15,6 +15,8 @@ const LANGUAGE_BY_EXT: Record<string, string> = {
   less: 'less',
   md: 'markdown',
   markdown: 'markdown',
+  diff: 'diff',
+  patch: 'diff',
   py: 'python',
   go: 'go',
   rs: 'rust',

@@ -31,6 +31,7 @@ export interface OpenFile {
   language: string
   isBinary: boolean
   isImage: boolean
+  readOnly?: boolean
   dataUrl?: string
 }
 

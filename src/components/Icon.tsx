@@ -25,6 +25,7 @@ export type IconName =
   | 'expand'
   | 'collapse'
   | 'broadcast'
+  | 'git-diff'
   | 'win-minimize'
   | 'win-maximize'
   | 'win-restore'
@@ -109,6 +110,13 @@ const PATHS: Record<IconName, JSX.Element> = {
     <>
       <circle cx="12" cy="12" r="2" />
       <path d="M7.5 7.5a6 6 0 0 0 0 9M16.5 7.5a6 6 0 0 1 0 9M4.7 4.7a10 10 0 0 0 0 14.6M19.3 4.7a10 10 0 0 1 0 14.6" />
+    </>
+  ),
+  'git-diff': (
+    <>
+      <path d="M8 6h8M8 18h8M12 8.5v7" />
+      <path d="m9.5 13 2.5 2.5 2.5-2.5" />
+      <path d="M4 6h1.5M18.5 6H20M4 18h1.5M18.5 18H20" />
     </>
   ),
   'win-minimize': <path d="M5 12h14" />,

@@ -101,6 +101,15 @@ function reducer(state: State, action: Action): State {
       return mapSession(state, action.id, (s) => {
         const existing = s.openFiles.find((f) => f.path === action.file.path)
         if (existing) {
+          if (action.file.readOnly) {
+            return {
+              ...s,
+              openFiles: s.openFiles.map((f) =>
+                f.path === action.file.path ? action.file : f
+              ),
+              activeFilePath: action.file.path
+            }
+          }
           return { ...s, activeFilePath: existing.path }
         }
         return {

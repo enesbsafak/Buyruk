@@ -92,19 +92,23 @@ export function CodeEditor({
 
   const files = session.openFiles
   const active = files.find((f) => f.path === session.activeFilePath) ?? null
-  const editable = !!active && !active.isBinary && !active.isImage
-  const isDirty = !!active && editable && active.content !== active.savedContent
+  const textFile = !!active && !active.isBinary && !active.isImage
+  const editable = !!active && !active.isBinary && !active.isImage && !active.readOnly
+  const showSavedDiff = editable && diff
+  const isDirty = editable && active.content !== active.savedContent
 
   return (
     <div className="editor">
       <div className="editor-chrome">
         <div className="editor-tabs" aria-label="Açık dosyalar">
           {files.map((f) => {
-            const dirty = !f.isBinary && !f.isImage && f.content !== f.savedContent
+            const dirty = !f.readOnly && !f.isBinary && !f.isImage && f.content !== f.savedContent
             return (
               <div
                 key={f.path}
-                className={`editor-tab ${f.path === session.activeFilePath ? 'is-active' : ''}`}
+                className={`editor-tab ${f.path === session.activeFilePath ? 'is-active' : ''} ${
+                  f.readOnly ? 'is-readonly' : ''
+                }`}
                 title={f.path}
               >
                 <button
@@ -189,7 +193,7 @@ export function CodeEditor({
           </div>
         )}
 
-        {editable && diff && (
+        {showSavedDiff && (
           <Suspense fallback={<EditorFallback />}>
             <DiffEditor
               key={active!.path}
@@ -203,7 +207,7 @@ export function CodeEditor({
           </Suspense>
         )}
 
-        {editable && !diff && (
+        {textFile && !showSavedDiff && (
           <Suspense fallback={<EditorFallback />}>
             <Editor
               height="100%"
@@ -211,9 +215,11 @@ export function CodeEditor({
               path={active!.path}
               language={active!.language}
               value={active!.content}
-              onChange={(value) => onChangeContent(active!.path, value ?? '')}
+              onChange={(value) => {
+                if (!active!.readOnly) onChangeContent(active!.path, value ?? '')
+              }}
               onMount={handleMount}
-              options={EDITOR_OPTIONS}
+              options={{ ...EDITOR_OPTIONS, readOnly: !!active!.readOnly }}
             />
           </Suspense>
         )}

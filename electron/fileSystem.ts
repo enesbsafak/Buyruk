@@ -33,6 +33,18 @@ const MAX_TEXT_SIZE = 5 * 1024 * 1024 // 5 MB
 const BINARY_SNIFF_BYTES = 8000
 const GIT_RENAME_ARROW = /^.* -> (.*)$/
 
+function toGitPath(filePath: string): string {
+  return filePath.split(path.sep).join('/')
+}
+
+function relativeGitPath(repoRoot: string, filePath: string): string | null {
+  const relativePath = path.relative(repoRoot, filePath)
+  if (!relativePath || relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    return null
+  }
+  return toGitPath(relativePath)
+}
+
 // A NUL byte in the first chunk is a reliable, cheap "this is binary" heuristic.
 function looksBinary(buffer: Buffer): boolean {
   const len = Math.min(buffer.length, BINARY_SNIFF_BYTES)
@@ -40,6 +52,72 @@ function looksBinary(buffer: Buffer): boolean {
     if (buffer[i] === 0) return true
   }
   return false
+}
+
+async function createUntrackedFileDiff(repoRoot: string, filePath: string): Promise<string> {
+  const relativePath = relativeGitPath(repoRoot, filePath)
+  if (!relativePath) return ''
+
+  const buffer = await fs.readFile(filePath)
+  if (buffer.length > MAX_TEXT_SIZE || looksBinary(buffer)) {
+    return [
+      `diff --git a/${relativePath} b/${relativePath}`,
+      'new file mode 100644',
+      'index 0000000..0000000',
+      '--- /dev/null',
+      `+++ b/${relativePath}`,
+      'Binary file not shown.'
+    ].join('\n')
+  }
+
+  const content = buffer.toString('utf8')
+  const hasTrailingNewline = /\r?\n$/.test(content)
+  const lines = content.length
+    ? content.replace(/\r\n/g, '\n').split('\n').slice(0, hasTrailingNewline ? -1 : undefined)
+    : []
+
+  const header = [
+    `diff --git a/${relativePath} b/${relativePath}`,
+    'new file mode 100644',
+    'index 0000000..0000000',
+    '--- /dev/null',
+    `+++ b/${relativePath}`
+  ]
+
+  if (lines.length === 0) return `${header.join('\n')}\n`
+
+  const body = lines.map((line) => `+${line}`)
+  if (!hasTrailingNewline) body.push('\\ No newline at end of file')
+
+  return `${[...header, `@@ -0,0 +1,${lines.length} @@`, ...body].join('\n')}\n`
+}
+
+async function getGitDiff(root: string, filePath: string): Promise<string> {
+  const repoRoot = (await execGit(['rev-parse', '--show-toplevel'], root)).trim()
+  if (!repoRoot) return ''
+
+  const normalizedRepoRoot = path.normalize(repoRoot)
+  const relativePath = relativeGitPath(normalizedRepoRoot, path.normalize(filePath))
+  if (!relativePath) return ''
+
+  const staged = await execGit(['diff', '--cached', '--no-ext-diff', '--', relativePath], normalizedRepoRoot)
+  const unstaged = await execGit(['diff', '--no-ext-diff', '--', relativePath], normalizedRepoRoot)
+
+  if (staged && unstaged) {
+    return [`# Staged changes`, staged.trimEnd(), `# Working tree changes`, unstaged.trimEnd()].join(
+      '\n\n'
+    )
+  }
+  if (staged || unstaged) return staged || unstaged
+
+  const tracked = (await execGit(['ls-files', '--error-unmatch', '--', relativePath], normalizedRepoRoot)).trim()
+  if (tracked) return ''
+
+  try {
+    return await createUntrackedFileDiff(normalizedRepoRoot, filePath)
+  } catch {
+    return ''
+  }
 }
 
 export function registerFileSystemHandlers(
@@ -232,4 +310,8 @@ export function registerFileSystemHandlers(
       return { isRepo: true, branch, files }
     }
   )
+
+  ipcMain.handle(IPC.GIT_DIFF, async (_e, root: string, filePath: string): Promise<string> => {
+    return getGitDiff(root, filePath)
+  })
 }

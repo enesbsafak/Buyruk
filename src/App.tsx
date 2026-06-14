@@ -134,6 +134,7 @@ interface WorkspacePanelsProps {
   onSaveFile: () => void
   onSelectFile: (path: string) => void
   onCloseFile: (path: string) => void
+  onOpenGitDiff: (path: string) => void
 }
 
 function WorkspacePanels({
@@ -156,7 +157,8 @@ function WorkspacePanels({
   onChangeContent,
   onSaveFile,
   onSelectFile,
-  onCloseFile
+  onCloseFile,
+  onOpenGitDiff
 }: WorkspacePanelsProps) {
   const monacoTheme = settings.theme === 'light' ? 'vs' : 'tokyo-night'
 
@@ -183,6 +185,7 @@ function WorkspacePanels({
             hiddenFolders={settings.hiddenFolders}
             gitFiles={gitStatus.files}
             onOpenFile={onOpenFile}
+            onOpenGitDiff={onOpenGitDiff}
             onOpenTerminalHere={onOpenTerminalHere}
             refreshNonce={explorerNonce}
             onRefresh={onRefresh}
@@ -557,7 +560,7 @@ function useFileController({
     const session = activeSessionRef.current
     if (!session) return
     for (const file of session.openFiles) {
-      if (file.isBinary || file.isImage) continue
+      if (file.readOnly || file.isBinary || file.isImage) continue
       window.api
         .readFile(file.path)
         .then((res) => {
@@ -663,7 +666,7 @@ function useFileController({
   const saveActiveFile = useCallback(async () => {
     if (!activeSession) return
     const file = activeSession.openFiles.find((item) => item.path === activeSession.activeFilePath)
-    if (!file || file.isBinary) return
+    if (!file || file.readOnly || file.isBinary) return
     try {
       await window.api.writeFile(file.path, file.content)
       actions.markSaved(activeSession.id, file.path)
@@ -694,6 +697,37 @@ function useFileController({
     [activeSessionRef, actions]
   )
 
+  const handleOpenGitDiff = useCallback(
+    async (path: string) => {
+      const session = activeSessionRef.current
+      if (!session) return
+
+      try {
+        const diff = await window.api.gitDiff(session.cwd, path)
+        const content = diff.trimEnd()
+        if (!content) {
+          dialog.notify('Bu dosyada Git diff yok.', 'info')
+          return
+        }
+
+        actions.openFile(session.id, {
+          path: `git-diff:${path}`,
+          name: `${basename(path)}.diff`,
+          content,
+          savedContent: content,
+          language: 'diff',
+          isBinary: false,
+          isImage: false,
+          readOnly: true
+        })
+        dispatchUi({ type: 'set-status-message', message: `Git diff açıldı: ${basename(path)}` })
+      } catch (err) {
+        dialog.notify(`Git diff açılamadı: ${errMsg(err)}`, 'error')
+      }
+    },
+    [activeSessionRef, actions, dialog, dispatchUi]
+  )
+
   const handleSelectFile = useCallback(
     (path: string) => {
       const session = activeSessionRef.current
@@ -714,6 +748,7 @@ function useFileController({
     handleOpenFolder,
     handleNewFolder,
     handleOpenFile,
+    handleOpenGitDiff,
     saveActiveFile,
     handleChangeContent,
     handleSelectFile,
@@ -775,6 +810,7 @@ export function App() {
     handleOpenFolder,
     handleNewFolder,
     handleOpenFile,
+    handleOpenGitDiff,
     saveActiveFile,
     handleChangeContent,
     handleSelectFile,
@@ -837,7 +873,9 @@ export function App() {
   useEffect(() => {
     return window.api.windowControls.onConfirmClose(async () => {
       const hasUnsaved = sessionsRef.current.some((s) =>
-        s.openFiles.some((f) => !f.isBinary && !f.isImage && f.content !== f.savedContent)
+        s.openFiles.some(
+          (f) => !f.readOnly && !f.isBinary && !f.isImage && f.content !== f.savedContent
+        )
       )
       if (!hasUnsaved) {
         window.api.windowControls.doClose()
@@ -950,6 +988,7 @@ export function App() {
         onSaveFile={saveActiveFile}
         onSelectFile={handleSelectFile}
         onCloseFile={handleCloseFile}
+        onOpenGitDiff={handleOpenGitDiff}
       />
 
       <StatusBar

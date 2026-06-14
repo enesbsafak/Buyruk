@@ -27,6 +27,7 @@ declare global {
       gitStatus(
         root: string
       ): Promise<{ isRepo: boolean; branch: string; files: Record<string, string> }>
+      gitDiff(root: string, filePath: string): Promise<string>
 
       // Clipboard
       clipboardHasImage(): boolean

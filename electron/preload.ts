@@ -58,6 +58,8 @@ const api = {
     root: string
   ): Promise<{ isRepo: boolean; branch: string; files: Record<string, string> }> =>
     ipcRenderer.invoke(IPC.GIT_STATUS, root),
+  gitDiff: (root: string, filePath: string): Promise<string> =>
+    ipcRenderer.invoke(IPC.GIT_DIFF, root, filePath),
 
   // ---- Clipboard ----
   clipboardHasImage: (): boolean => !clipboard.readImage().isEmpty(),

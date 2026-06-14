@@ -102,6 +102,7 @@ interface FileExplorerProps {
   hiddenFolders: string[]
   gitFiles: Record<string, string>
   onOpenFile: (path: string) => void
+  onOpenGitDiff: (path: string) => void
   onOpenTerminalHere: (cwd: string, type: TerminalType) => void
   refreshNonce: number
   onRefresh: () => void
@@ -112,6 +113,7 @@ export function FileExplorer({
   hiddenFolders,
   gitFiles,
   onOpenFile,
+  onOpenGitDiff,
   onOpenTerminalHere,
   refreshNonce,
   onRefresh
@@ -139,6 +141,7 @@ export function FileExplorer({
       hiddenFolders={hiddenFolders}
       gitFiles={gitFiles}
       onOpenFile={onOpenFile}
+      onOpenGitDiff={onOpenGitDiff}
       onOpenTerminalHere={onOpenTerminalHere}
       refreshNonce={refreshNonce}
       onRefresh={onRefresh}
@@ -151,6 +154,7 @@ function FileExplorerContent({
   hiddenFolders,
   gitFiles,
   onOpenFile,
+  onOpenGitDiff,
   onOpenTerminalHere,
   refreshNonce,
   onRefresh
@@ -163,6 +167,8 @@ function FileExplorerContent({
     node ? (node.isDirectory ? node.path : dirname(node.path)) : rootPath
 
   const targetDir = targetDirFor(selected)
+  const selectedGitCode =
+    selected && !selected.isDirectory ? gitFiles[selected.path.toLowerCase()] : undefined
 
   const fail = (action: string, err: unknown) =>
     dialog.notify(`${action}: ${err instanceof Error ? err.message : String(err)}`, 'error')
@@ -230,6 +236,13 @@ function FileExplorerContent({
     const items: MenuItem[] = []
     if (!node.isDirectory) {
       items.push({ label: 'Düzenleyicide aç', icon: 'file', onClick: () => onOpenFile(node.path) })
+      if (gitFiles[node.path.toLowerCase()]) {
+        items.push({
+          label: 'Git diff göster',
+          icon: 'git-diff',
+          onClick: () => onOpenGitDiff(node.path)
+        })
+      }
     }
     items.push({
       label: 'Burada terminal aç',
@@ -269,6 +282,15 @@ function FileExplorerContent({
             </button>
             <button type="button" className="icon-btn" title="Yeniden Adlandır" disabled={!selected} onClick={handleRename}>
               <Icon name="edit" />
+            </button>
+            <button
+              type="button"
+              className="icon-btn"
+              title="Git diff"
+              disabled={!selectedGitCode}
+              onClick={() => selected && onOpenGitDiff(selected.path)}
+            >
+              <Icon name="git-diff" />
             </button>
             <button type="button" className="icon-btn" title="Sil" disabled={!selected} onClick={handleDelete}>
               <Icon name="trash" />
