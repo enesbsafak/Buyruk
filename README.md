@@ -4,6 +4,10 @@ Buyruk, Windows için geliştirilmiş açık kaynak bir masaüstü çalışma al
 
 İndirme: [v1.0.0 release](https://github.com/enesbsafak/Buyruk/releases/tag/v1.0.0)
 
+![Buyruk çalışma alanı ekran görüntüsü](docs/screenshot.png)
+
+Görseldeki proje yolu, terminal çıktısı ve dosyalar anonim örnek veridir.
+
 ## Teknoloji
 
 Electron, React, TypeScript, Vite, xterm.js, node-pty ve Monaco Editor.

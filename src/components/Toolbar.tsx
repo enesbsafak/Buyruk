@@ -63,9 +63,9 @@ export function Toolbar({
 
       <div className="toolbar-group no-drag" aria-label="Yeni oturum">
         {NEW_BUTTONS.map(({ type, label }) => (
-          <button type="button" key={type} className="seg-btn" onClick={() => onNewTerminal(type)}>
+          <button type="button" key={type} className="seg-btn" title={`Yeni ${label}`} onClick={() => onNewTerminal(type)}>
             <CliIcon type={type} size={15} />
-            {label}
+            <span className="seg-label">{label}</span>
           </button>
         ))}
       </div>
@@ -73,12 +73,13 @@ export function Toolbar({
       <div className="dropdown no-drag" ref={recentsRef}>
         <button
           type="button"
-          className="btn btn-ghost"
+          className="btn btn-ghost toolbar-action"
           onClick={() => setRecentsOpen((o) => !o)}
           disabled={recents.length === 0}
           title="Son klasörler"
         >
-          <Icon name="chevron" /> Son
+          <Icon name="chevron" />
+          <span className="toolbar-label">Son</span>
         </button>
         {recentsOpen && (
           <div className="dropdown-panel">
@@ -102,14 +103,17 @@ export function Toolbar({
         )}
       </div>
 
-      <button type="button" className="btn btn-ghost no-drag" onClick={onOpenFolder}>
-        <Icon name="folder" /> Klasör Aç
+      <button type="button" className="btn btn-ghost toolbar-action no-drag" title="Klasör Aç" onClick={onOpenFolder}>
+        <Icon name="folder" />
+        <span className="toolbar-label">Klasör Aç</span>
       </button>
-      <button type="button" className="btn btn-ghost no-drag" onClick={onNewFolder}>
-        <Icon name="folder-plus" /> Yeni Klasör
+      <button type="button" className="btn btn-ghost toolbar-action no-drag" title="Yeni Klasör" onClick={onNewFolder}>
+        <Icon name="folder-plus" />
+        <span className="toolbar-label">Yeni Klasör</span>
       </button>
-      <button type="button" className="btn btn-ghost no-drag" onClick={onCloseActive} disabled={!hasActive}>
-        <Icon name="close" /> Terminali Kapat
+      <button type="button" className="btn btn-ghost toolbar-action no-drag" title="Terminali Kapat" onClick={onCloseActive} disabled={!hasActive}>
+        <Icon name="close" />
+        <span className="toolbar-label">Terminali Kapat</span>
       </button>
 
       <div className="toolbar-spacer" />

@@ -118,6 +118,8 @@ button {
   gap: 8px;
   height: 46px;
   padding: 0 0 0 12px;
+  min-width: 0;
+  overflow: hidden;
   background: linear-gradient(180deg, var(--bg-2), var(--bg-1));
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
@@ -135,6 +137,7 @@ button {
   align-items: stretch;
   height: 100%;
   margin-left: 2px;
+  flex: 0 0 auto;
 }
 .win-btn {
   width: 46px;
@@ -207,6 +210,7 @@ button {
   display: flex;
   align-items: center;
   gap: 7px;
+  flex: 0 0 auto;
   font-weight: 600;
   letter-spacing: -0.01em;
   margin-right: 4px;
@@ -221,13 +225,16 @@ button {
 }
 
 .toolbar-spacer {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 /* Segmented "new terminal" control */
 .toolbar-group {
   display: flex;
   align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
   background: var(--bg-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -237,7 +244,9 @@ button {
 .seg-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
+  flex: 0 0 auto;
   background: transparent;
   color: var(--text-dim);
   border: none;
@@ -254,6 +263,10 @@ button {
 }
 .seg-btn:active {
   transform: translateY(0.5px);
+}
+
+.toolbar-action {
+  flex: 0 0 auto;
 }
 
 /* ---------- Buttons ---------- */
@@ -338,6 +351,29 @@ button {
   color: var(--accent);
 }
 
+@media (max-width: 1120px) {
+  .toolbar {
+    gap: 6px;
+    padding-left: 8px;
+  }
+  .toolbar-group {
+    gap: 1px;
+  }
+  .seg-btn {
+    width: 31px;
+    padding-inline: 0;
+  }
+  .toolbar-action {
+    width: 34px;
+    padding-inline: 0;
+    justify-content: center;
+  }
+  .seg-label,
+  .toolbar-label {
+    display: none;
+  }
+}
+
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
@@ -362,6 +398,8 @@ button {
 }
 .split-pane {
   overflow: hidden;
+  min-width: 0;
+  min-height: 0;
 }
 .split-first {
   flex: none;
@@ -751,22 +789,36 @@ button {
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-width: 0;
   background: var(--bg-1);
+  container-type: inline-size;
+}
+.editor-chrome {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  min-height: 38px;
+  background: var(--bg-1);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow: hidden;
 }
 .editor-tabs {
   display: flex;
   align-items: stretch;
   gap: 0;
-  background: var(--bg-1);
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-  min-height: 38px;
+  flex: 1 1 auto;
+  min-width: 0;
   overflow-x: auto;
+  overflow-y: hidden;
 }
 .editor-tab {
   display: flex;
   align-items: center;
   gap: 7px;
+  flex: 0 1 188px;
+  min-width: 96px;
+  max-width: 240px;
   border-right: 1px solid var(--border);
   white-space: nowrap;
   color: var(--text-dim);
@@ -794,6 +846,7 @@ button {
   display: flex;
   align-items: center;
   gap: 7px;
+  flex: 1 1 auto;
   align-self: stretch;
   min-width: 0;
   background: transparent;
@@ -812,8 +865,16 @@ button {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.editor-tab-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .editor-dirty {
+  flex: 0 0 auto;
   width: 7px;
   height: 7px;
   border-radius: 50%;
@@ -822,8 +883,10 @@ button {
 .editor-tab-close {
   display: grid;
   place-items: center;
+  flex: 0 0 auto;
   width: 18px;
   height: 18px;
+  margin-right: 6px;
   background: transparent;
   border: none;
   color: var(--text-muted);
@@ -835,13 +898,24 @@ button {
   background: var(--danger-soft);
   color: var(--danger);
 }
-.editor-toolbar-spacer {
-  flex: 1;
-  min-width: 12px;
+.editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  padding: 0 8px;
+  background: var(--bg-1);
+  border-left: 1px solid var(--border);
+  box-shadow: -10px 0 14px -14px rgba(0, 0, 0, 0.9);
+  z-index: 1;
+}
+.editor-action-btn {
+  flex: 0 0 auto;
 }
 .editor-save {
   align-self: center;
-  margin: 0 8px;
+  margin: 0;
+  flex: 0 0 auto;
 }
 .editor-body {
   flex: 1;
@@ -870,6 +944,25 @@ button {
   max-height: 100%;
   object-fit: contain;
 }
+
+@container (max-width: 430px) {
+  .editor-tab {
+    min-width: 82px;
+    flex-basis: 132px;
+  }
+  .editor-actions {
+    padding: 0 5px;
+  }
+  .editor-save {
+    width: 26px;
+    padding-inline: 0;
+    justify-content: center;
+  }
+  .editor-save-label {
+    display: none;
+  }
+}
+
 .diff-hint {
   flex-shrink: 0;
   padding: 4px 12px;

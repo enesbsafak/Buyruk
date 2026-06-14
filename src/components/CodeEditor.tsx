@@ -97,60 +97,68 @@ export function CodeEditor({
 
   return (
     <div className="editor">
-      <div className="editor-tabs">
-        {files.map((f) => {
-          const dirty = !f.isBinary && !f.isImage && f.content !== f.savedContent
-          return (
-            <div
-              key={f.path}
-              className={`editor-tab ${f.path === session.activeFilePath ? 'is-active' : ''}`}
-              title={f.path}
-            >
-              <button
-                type="button"
-                className="editor-tab-main"
-                onClick={() => onSelectFile(f.path)}
+      <div className="editor-chrome">
+        <div className="editor-tabs" aria-label="Açık dosyalar">
+          {files.map((f) => {
+            const dirty = !f.isBinary && !f.isImage && f.content !== f.savedContent
+            return (
+              <div
+                key={f.path}
+                className={`editor-tab ${f.path === session.activeFilePath ? 'is-active' : ''}`}
+                title={f.path}
               >
-                <span className="tab-ico">
-                  <Icon name={f.isImage ? 'file' : 'file'} size={14} />
-                </span>
-                <span className="editor-tab-name">
-                  {f.name}
-                  {dirty && <span className="editor-dirty" title="Kaydedilmemiş değişiklik" />}
-                </span>
-              </button>
-              <button
-                type="button"
-                className="editor-tab-close"
-                title="Kapat"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onCloseFile(f.path)
-                }}
-              >
-                <Icon name="close" size={13} />
-              </button>
-            </div>
-          )
-        })}
-        <div className="editor-toolbar-spacer" />
+                <button
+                  type="button"
+                  className="editor-tab-main"
+                  onClick={() => onSelectFile(f.path)}
+                >
+                  <span className="tab-ico">
+                    <Icon name={f.isImage ? 'file' : 'file'} size={14} />
+                  </span>
+                  <span className="editor-tab-name">
+                    <span className="editor-tab-title">{f.name}</span>
+                    {dirty && <span className="editor-dirty" title="Kaydedilmemiş değişiklik" />}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="editor-tab-close"
+                  title="Kapat"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onCloseFile(f.path)
+                  }}
+                >
+                  <Icon name="close" size={13} />
+                </button>
+              </div>
+            )
+          })}
+        </div>
         {editable && (
-          <>
+          <div className="editor-actions" aria-label="Editör araçları">
             <button
               type="button"
-              className={`pane-btn ${diff ? 'active' : ''}`}
+              className={`pane-btn editor-action-btn ${diff ? 'active' : ''}`}
               title="Kayıtlı sürümle karşılaştır"
+              aria-pressed={diff}
               onClick={() => setDiff((d) => !d)}
             >
               <Icon name="expand" size={14} />
             </button>
-            <button type="button" className="pane-btn" title="Biçimlendir" onClick={formatActive}>
+            <button
+              type="button"
+              className="pane-btn editor-action-btn"
+              title="Biçimlendir"
+              onClick={formatActive}
+            >
               <Icon name="bolt" size={14} />
             </button>
             <button type="button" className="btn btn-small editor-save" onClick={onSave} title="Kaydet (Ctrl+S)">
-              <Icon name="save" size={13} /> Kaydet
+              <Icon name="save" size={13} />
+              <span className="editor-save-label">Kaydet</span>
             </button>
-          </>
+          </div>
         )}
       </div>
 
