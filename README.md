@@ -4,7 +4,7 @@ Buyruk, Windows için geliştirilmiş açık kaynak bir masaüstü çalışma al
 
 İndirme: [son Windows release](https://github.com/enesbsafak/Buyruk/releases/latest)
 
-![Buyruk çalışma alanı ekran görüntüsü](docs/screenshot.png)
+![Buyruk çalışma alanı ekran görüntüsü](docs/buyruk-workspace-v1.0.5.png)
 
 Görseldeki proje yolu, terminal çıktısı ve dosyalar anonim örnek veridir.
 
