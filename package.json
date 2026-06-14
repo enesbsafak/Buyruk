@@ -1,6 +1,6 @@
 {
   "name": "buyruk",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Buyruk — multi-CLI terminal workspace, file manager and code editor for Windows (Electron + React + TypeScript + Vite)",
   "main": "dist-electron/main.js",
   "author": "Buyruk",
@@ -86,9 +86,7 @@
           ]
         }
       ],
-      "signtoolOptions": {
-        "publisherName": "Buyruk"
-      }
+      "verifyUpdateCodeSignature": false
     },
     "nsis": {
       "oneClick": false,
