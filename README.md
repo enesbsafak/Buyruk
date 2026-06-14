@@ -1,119 +1,164 @@
 # Buyruk
 
-Windows için 3 panelli bir geliştirici masaüstü uygulaması: çoklu terminal (CMD / PowerShell / Claude / Codex) + dosya yöneticisi + Monaco kod editörü. Her terminal kendi klasörüne bağlıdır; aktif terminale tıklayınca sağ taraf otomatik o klasöre geçer.
+Buyruk, Windows için geliştirilmiş açık kaynak bir masaüstü çalışma alanı uygulamasıdır. Tek pencerede çoklu terminal, dosya gezgini ve Monaco tabanlı kod editörü sunar.
+
+İndirme: [v1.0.0 release](https://github.com/enesbsafak/Buyruk/releases/tag/v1.0.0)
 
 ## Teknoloji
 
-Electron + React + TypeScript + Vite · [xterm.js](https://xtermjs.org/) · [node-pty](https://github.com/microsoft/node-pty) · [Monaco Editor](https://microsoft.github.io/monaco-editor/)
+Electron, React, TypeScript, Vite, xterm.js, node-pty ve Monaco Editor.
 
-Güvenlik: `contextIsolation: true`, `nodeIntegration: false`. Tüm Node/dosya/terminal işlemleri main process'te yapılır, `preload.ts` üzerinden `window.api` ile güvenli expose edilir.
+Güvenlik tarafında `contextIsolation: true` ve `nodeIntegration: false` kullanılır. Dosya sistemi, terminal ve updater işlemleri Electron main process içinde çalışır; renderer tarafına yalnızca `preload.ts` üzerinden güvenli API açılır.
 
 ## Özellikler
 
-**Pencere & oturum**
-- Özel (frameless) başlık çubuğu + kendi pencere butonları (küçült/büyüt/kapat); sürüklenebilir toolbar.
-- Pencere boyutu/konumu/maximize durumu kalıcı.
-- Açık terminaller (tip + klasör) kapanışta kaydedilir, açılışta geri yüklenir.
-- Son klasörler menüsü (toolbar'daki "Son") ile tek tıkla yeni oturum.
+**Terminal çalışma alanı**
 
-**Terminal**
-- Çoklu terminal **otomatik ızgara döşeme** (1 → tam, 2 → yan yana, 4 → 2×2 …).
-- Her terminalde: arama (Ctrl+F), temizle, **yeniden başlat** (kapanınca yerinde diril), **zoom**.
-- **Broadcast** modu: giriş tüm terminallere gider.
-- Alttaki **prompt kutusu** ile aktif terminale (Claude/Codex) hızlı metin gönderme.
-- Nerd Font desteği (varsayılan `JetBrainsMono NF`) — CLI glyph'leri görünür.
+- CMD, PowerShell, Claude ve Codex oturumları.
+- Birden fazla terminal açıldığında otomatik grid yerleşimi.
+- Her terminal için arama, temizleme, yeniden başlatma ve zoom kontrolleri.
+- Broadcast modu ile girişi tüm terminallere aynı anda gönderme.
+- Aktif terminale hızlı prompt gönderme.
+- Oturumları ve son klasörleri kalıcı saklama.
 
-**Dosya yöneticisi**
-- Lazy-load ağaç, otomatik yenileme (`fs.watch`), git durumu rozetleri (M/A/U/D) + dal adı.
-- Sağ tık menüsü: burada terminal aç, Explorer'da göster, yol kopyala, yeni/yeniden adlandır/sil.
-- `Ctrl+P` ile fuzzy hızlı dosya açma.
+**Dosya gezgini**
 
-**Editör**
-- Monaco; uzantıya göre dil, Bul/Değiştir (Ctrl+F/H), biçimlendir, **diff** (kayıtlı sürümle karşılaştır), resim önizleme.
-- Sekmeli; `Ctrl+S` veya buton ile kaydet; kaydedilmemiş değişiklik noktayla gösterilir.
+- Aktif terminal klasörüne bağlı dosya ağacı.
+- `fs.watch` ile klasör yenileme.
+- Git dal bilgisi ve dosya durum rozetleri.
+- Sağ tık menüsü: burada terminal aç, Explorer'da göster, yol kopyala, yeni dosya/klasör, yeniden adlandır, sil.
+- `Ctrl+P` ile fuzzy dosya açma.
 
-**Genel**
-- Komut paleti (`Ctrl+Shift+P`), tema (koyu/açık), iş bitince (bell) bildirimi.
-- GitHub Releases üzerinden otomatik güncelleme; paketli sürüm açılışta kontrol eder, durum status bar'da görünür.
+**Kod editörü**
 
-### Klavye kısayolları
+- Monaco Editor.
+- Sekmeli dosya açma.
+- `Ctrl+S` ile kaydetme.
+- Bul/değiştir, biçimlendir, kaydedilmiş sürümle diff görünümü.
+- Resim önizleme ve ikili/büyük dosya koruması.
 
-| Kısayol | İşlev |
-| --- | --- |
-| `Ctrl+Shift+P` | Komut paleti |
-| `Ctrl+P` | Hızlı dosya aç |
-| `Ctrl+S` | Kaydet |
-| `Ctrl+F` | Terminalde / editörde ara |
-| `Ctrl+1…9` | N. terminale geç |
-| `Ctrl+,` | Ayarlar |
+**Uygulama**
+
+- Frameless pencere ve kalıcı pencere konumu.
+- Koyu/açık tema.
+- Bell bildirimi.
+- GitHub Releases üzerinden otomatik güncelleme.
+- Güvenli Electron ayarları: `contextIsolation: true`, `nodeIntegration: false`.
 
 ## Kurulum
 
-> **Önkoşul:** Node.js 18+ ve `node-pty` native derlemesi için **Visual Studio C++ Build Tools (2022 veya 2026) + Python 3** ("Desktop development with C++" iş yükü).
+Hazır Windows installer için release sayfasındaki `.exe` dosyasını indir:
+
+```text
+Buyruk-1.0.0-win-x64.exe
+```
+
+Installer henüz imzalı değildir. Bu yüzden Windows SmartScreen uyarısı gösterebilir.
+
+## Geliştirme
+
+Önkoşullar:
+
+- Windows
+- Node.js 22 önerilir
+- Visual Studio C++ Build Tools
+- Python 3
 
 ```powershell
-cd multi-cli-workspace
+git clone https://github.com/enesbsafak/Buyruk.git
+cd Buyruk
 npm install
+npm run dev
 ```
 
-`postinstall`, `scripts/rebuild-native.mjs` ile `node-pty`'yi derler. Bu betik bu ortama özgü üç sorunu otomatik çözer: **node-gyp 13** (VS 2026 desteği), `NoDefaultCurrentDirectoryInExePath` temizliği (winpty), `SpectreMitigation=false`. Derleme başarısız olsa bile uygulama açılır; sadece terminal açınca uyarı verir — `npm run rebuild` ile tekrar denenebilir.
-
-## Çalıştırma / Build
+`node-pty` native modül gerektirir. `npm install` sonrasında `scripts/rebuild-native.mjs` çalışır ve Windows build ortamında gerekli rebuild adımını dener. Derleme başarısız olsa bile uygulama açılır; terminal açarken hata alırsan:
 
 ```powershell
-npm run dev        # Vite + Electron (geliştirme)
-npm run build      # production build (dist/, dist-electron/)
-npm run start      # build edilmiş uygulamayı çalıştır
-npm run dist       # Windows installer (electron-builder)
-npm run release:win # Windows installer + GitHub Release publish
+npm run rebuild
 ```
 
-## Release ve otomatik güncelleme
+## Komutlar
 
-Buyruk, Windows için `electron-builder` + `electron-updater` kullanır. Release workflow'u `v*.*.*` tag push edildiğinde çalışır, installer dosyasını ve auto-update metadata dosyalarını (`latest.yml` dahil) GitHub Release asset'lerine yükler.
+```powershell
+npm run dev         # Vite + Electron geliştirme modu
+npm run build       # production renderer/main build
+npm run typecheck   # TypeScript kontrolü
+npm test            # Vitest testleri
+npm run dist        # Windows installer üretir
+npm run release:win # Installer üretir ve GitHub Release'e publish eder
+```
 
-İlk kurulum:
+## Release
 
-1. GitHub'da public repo oluştur: varsayılan config `enesbsafak/Buyruk` için hazırdır.
-2. Repo farklıysa `package.json` içindeki `homepage`, `repository`, `bugs` ve `build.publish.owner/repo` alanlarını değiştir.
-3. Değişiklikleri push et.
-4. Sürümü artır:
+Release akışı GitHub Actions ile çalışır. `v*.*.*` formatında tag push edilince workflow:
+
+1. Windows runner'da bağımlılıkları kurar.
+2. `node-pty` native modülünü rebuild eder.
+3. Typecheck ve testleri çalıştırır.
+4. Electron installer üretir.
+5. GitHub Release asset'lerini yükler:
+   - `Buyruk-<version>-win-x64.exe`
+   - `Buyruk-<version>-win-x64.exe.blockmap`
+   - `latest.yml`
+
+Yeni release için:
 
 ```powershell
 npm version patch
 git push --follow-tags
 ```
 
-Tag push sonrası `.github/workflows/release.yml` Windows installer'ı yayınlar. Paketli uygulama yeni sürümü GitHub Releases üzerinden otomatik bulur; indirme tamamlanınca status bar'daki **Yeniden başlat** düğmesi kurulumu başlatır.
-
-Notlar:
-
-- Public GitHub Releases için `GH_TOKEN` workflow içinde otomatik sağlanır.
-- Windows kod imzalama henüz zorunlu değil, fakat public dağıtımda SmartScreen uyarılarını azaltmak için sonraki adım olarak sertifika eklenmelidir.
-- Auto-update geliştirme modunda çalışmaz; sadece paketlenmiş/kurulmuş sürümde kontrol eder.
+Auto-update yalnızca paketlenmiş/kurulmuş sürümde çalışır. Uygulama açılışta GitHub Releases üzerinden `latest.yml` dosyasını kontrol eder; yeni sürüm indirildiğinde status bar'da **Yeniden başlat** düğmesi görünür.
 
 ## Ayarlar
 
-CMD / PowerShell / Claude / Codex komutları, terminal fontu (Nerd Font önerilir), tema ve gizlenecek klasörler değiştirilebilir. Claude/Codex komutu tam yol da olabilir; bunlar `cmd.exe /k <komut>` içinde başlatılır. Ayarlar `localStorage` içinde saklanır.
+Uygulama içinden şunlar değiştirilebilir:
 
-## Proje yapısı
+- CMD komutu
+- PowerShell komutu
+- Claude komutu
+- Codex komutu
+- Terminal fontu ve font boyutu
+- Tema
+- Gizlenecek klasörler
 
-```
-multi-cli-workspace/
-  .github/   release workflow
-  electron/   main, preload, terminalManager, fileSystem, claudeUsage, windowState, ipcChannels
-  scripts/    rebuild-native.mjs
+Ayarlar localStorage içinde saklanır.
+
+## Proje Yapısı
+
+```text
+Buyruk/
+  .github/workflows/release.yml
+  electron/
+    fileSystem.ts
+    ipcChannels.ts
+    main.ts
+    preload.ts
+    terminalManager.ts
+    updater.ts
+    windowState.ts
+  scripts/
+    rebuild-native.mjs
   src/
-    components/  Toolbar, TerminalArea, TerminalPane, FileExplorer, CodeEditor, SettingsModal,
-                 StatusBar, SplitLayout, DialogProvider, Icon, ContextMenu, QuickOpen, CommandPalette
-    hooks/       useSessions, useFileTree, useSettings
-    utils/       language, pathUtils, persistence
-    App.tsx, main.tsx, types.ts, terminalBus.ts, monaco.ts, styles.css
+    components/
+    hooks/
+    utils/
+    App.tsx
+    main.tsx
+    monaco.ts
+    styles.css
+    types.ts
+    updateTypes.ts
 ```
 
-## Bilinen sınırlamalar
+## Lisans
 
-- **Klasör Aç** aktif oturumun gösterilen workspace kökünü değiştirir; çalışan terminalin gerçek dizini değişmez.
-- Çok sayıda terminalde her döşeme küçülür; terminaller her temada koyu kalır.
-- 5 MB üstü veya NUL bayt içeren dosyalar metin olarak açılamaz.
-- Yalnızca Windows hedeflenmiştir.
+MIT
+
+## Bilinen Sınırlamalar
+
+- Yalnızca Windows hedeflenir.
+- Installer şu an unsigned; public dağıtımda SmartScreen uyarısı beklenebilir.
+- Auto-update geliştirme modunda çalışmaz.
+- 5 MB üstü veya NUL byte içeren dosyalar metin olarak açılmaz.
+- Çok fazla terminal açıldığında her pane küçülür.
