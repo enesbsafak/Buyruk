@@ -1,0 +1,102 @@
+{
+  "name": "buyruk",
+  "version": "1.0.0",
+  "description": "Buyruk — multi-CLI terminal workspace, file manager and code editor for Windows (Electron + React + TypeScript + Vite)",
+  "main": "dist-electron/main.js",
+  "author": "Buyruk",
+  "license": "MIT",
+  "homepage": "https://github.com/enesbsafak/Buyruk#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/enesbsafak/Buyruk.git"
+  },
+  "bugs": {
+    "url": "https://github.com/enesbsafak/Buyruk/issues"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "start": "electron .",
+    "preview": "vite preview",
+    "dist": "vite build && electron-builder --win",
+    "release:win": "vite build && electron-builder --win --publish always",
+    "rebuild": "node scripts/rebuild-native.mjs",
+    "postinstall": "node scripts/rebuild-native.mjs"
+  },
+  "dependencies": {
+    "@monaco-editor/react": "^4.6.0",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/addon-search": "^0.15.0",
+    "@xterm/xterm": "^5.5.0",
+    "electron-updater": "^6.8.9",
+    "monaco-editor": "^0.52.2",
+    "node-pty": "^1.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "node-gyp": "^13.0.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3",
+    "vite-plugin-electron": "^0.29.0",
+    "vitest": "^4.1.8"
+  },
+  "overrides": {
+    "node-gyp": "$node-gyp"
+  },
+  "build": {
+    "appId": "com.buyruk.workspace",
+    "productName": "Buyruk",
+    "npmRebuild": false,
+    "directories": {
+      "output": "release"
+    },
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "**/node_modules/node-pty/**"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "enesbsafak",
+        "repo": "Buyruk",
+        "releaseType": "release"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "signtoolOptions": {
+        "publisherName": "Buyruk"
+      }
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Buyruk"
+    }
+  }
+}
