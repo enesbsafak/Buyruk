@@ -105,9 +105,11 @@ button {
 }
 
 .app {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100vh;
+  overflow: hidden;
   background: var(--bg-0);
 }
 
@@ -624,11 +626,45 @@ button {
   background: rgba(21, 22, 30, 0.55);
   backdrop-filter: blur(1px);
 }
+.pane-follow {
+  position: absolute;
+  right: 22px;
+  bottom: 14px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  max-width: calc(100% - 44px);
+  padding: 0 9px;
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+  background: var(--bg-3);
+  color: var(--text);
+  box-shadow: var(--shadow-pop);
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 650;
+  white-space: nowrap;
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease), color 0.15s var(--ease);
+}
+.pane-follow:hover {
+  border-color: var(--accent);
+  background: var(--bg-4);
+  color: var(--accent-hover);
+}
 
-.xterm-host {
+.xterm-shell {
+  position: relative;
   flex: 1;
   min-height: 0;
   width: 100%;
+  background: #15161e;
+}
+.xterm-host {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
   padding: 4px 6px;
   /* Terminals stay dark in both themes (xterm theme is dark). */
   background: #15161e;
@@ -637,12 +673,57 @@ button {
   height: 100%;
 }
 .xterm-host .xterm-viewport {
+  left: auto !important;
+  right: 0 !important;
+  width: 16px !important;
+  z-index: 3;
+  background: transparent !important;
   overflow-y: scroll !important;
   pointer-events: auto;
-  scrollbar-gutter: stable;
+  scrollbar-gutter: auto;
 }
 .xterm-host .xterm-screen {
+  position: relative;
+  z-index: 1;
   pointer-events: auto;
+}
+.xterm-host .xterm-viewport::-webkit-scrollbar {
+  width: 14px;
+}
+.xterm-host .xterm-viewport::-webkit-scrollbar-thumb {
+  background: rgba(192, 202, 245, 0.34);
+  border: 3px solid #15161e;
+  border-radius: 999px;
+}
+.xterm-host .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: rgba(122, 162, 247, 0.72);
+}
+.pane-scroll-rail {
+  position: absolute;
+  top: 5px;
+  right: 3px;
+  bottom: 5px;
+  z-index: 4;
+  width: 18px;
+  border-radius: 999px;
+  cursor: default;
+  touch-action: none;
+}
+.pane-scroll-rail:hover {
+  background: rgba(192, 202, 245, 0.05);
+}
+.pane-scroll-thumb {
+  position: absolute;
+  right: 4px;
+  width: 10px;
+  min-height: 28px;
+  border-radius: 999px;
+  background: rgba(192, 202, 245, 0.38);
+  box-shadow: inset 0 0 0 1px rgba(21, 22, 30, 0.72);
+}
+.pane-scroll-rail:hover .pane-scroll-thumb,
+.pane-scroll-rail:active .pane-scroll-thumb {
+  background: rgba(122, 162, 247, 0.78);
 }
 
 /* ---------- Empty / placeholder states ---------- */
@@ -828,6 +909,14 @@ button {
 }
 
 /* ---------- Git panel ---------- */
+.git-drawer-layer {
+  position: fixed;
+  inset: 46px 0 28px 0;
+  z-index: 180;
+  background: rgba(10, 11, 18, 0.18);
+  pointer-events: auto;
+}
+
 .git-panel {
   display: flex;
   flex: 0 0 268px;
@@ -835,6 +924,18 @@ button {
   min-height: 180px;
   border-top: 1px solid var(--border-strong);
   background: var(--bg-1);
+}
+.git-panel.is-floating {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  bottom: 10px;
+  width: min(430px, calc(100vw - 20px));
+  min-height: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
 }
 .git-panel-head {
   display: flex;

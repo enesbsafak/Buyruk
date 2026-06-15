@@ -2,6 +2,7 @@ import { Toolbar } from './Toolbar'
 import { StatusBar } from './StatusBar'
 import { WorkspacePanels } from './WorkspacePanels'
 import { AppOverlays } from './AppOverlays'
+import { GitPanel } from './GitPanel'
 import type { Command } from './CommandPalette'
 import type { OrchestratorConfig } from '../orchestrator'
 import type { RecentFolder } from '../utils/persistence'
@@ -146,8 +147,6 @@ export function AppView({
         settings={settings}
         broadcast={broadcast}
         gitStatus={gitStatus}
-        gitOverview={gitOverview}
-        gitPanelOpen={gitPanelOpen}
         explorerNonce={explorerNonce}
         onSelectSession={setActiveSession}
         onCloseSession={handleCloseSession}
@@ -158,14 +157,34 @@ export function AppView({
         onOpenFile={handleOpenFile}
         onOpenTerminalHere={handleOpenTerminalHere}
         onRefresh={bumpExplorer}
-        onRefreshGit={handleRefreshGit}
-        onFetchGit={handleFetchGit}
         onChangeContent={handleChangeContent}
         onSaveFile={saveActiveFile}
         onSelectFile={handleSelectFile}
         onCloseFile={handleCloseFile}
         onOpenGitDiff={handleOpenGitDiff}
       />
+
+      {gitPanelOpen && (
+        <div
+          className="git-drawer-layer"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) toggleGitPanel()
+          }}
+        >
+          <GitPanel
+            overview={gitOverview}
+            floating
+            onRefresh={handleRefreshGit}
+            onFetch={handleFetchGit}
+            onOpenDiff={(path) => {
+              handleOpenGitDiff(path)
+              toggleGitPanel()
+            }}
+            onClose={toggleGitPanel}
+          />
+        </div>
+      )}
 
       <StatusBar
         activeSession={activeSession}

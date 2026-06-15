@@ -9,7 +9,7 @@ export interface FileNode {
   isDirectory: boolean
 }
 
-export type TerminalType = 'cmd' | 'powershell' | 'claude' | 'codex'
+export type TerminalType = 'cmd' | 'powershell' | 'claude' | 'codex' | 'opencode'
 
 export interface CreateTerminalOptions {
   type: TerminalType

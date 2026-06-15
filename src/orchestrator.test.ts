@@ -11,6 +11,7 @@ const settings: Settings = {
   powershellCommand: 'powershell.exe',
   claudeCommand: 'claude',
   codexCommand: 'codex',
+  opencodeCommand: 'opencode',
   hiddenFolders: [],
   terminalFont: 'Consolas',
   terminalFontSize: 13,
@@ -24,6 +25,7 @@ describe('orchestrator config', () => {
     expect(config.enabled).toBe(false)
     expect(config.orchestratorModelId).toBe('claude')
     expect(config.writerModelId).toBe('codex')
+    expect(config.models.map((model) => model.id)).toEqual(['claude', 'codex', 'opencode'])
     expect(config.applyMode).toBe('user-confirmed')
     expect(config.fileLocking).toBe(true)
   })

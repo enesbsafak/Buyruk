@@ -2,8 +2,7 @@ import { TerminalArea } from './TerminalArea'
 import { FileExplorer } from './FileExplorer'
 import { CodeEditor } from './CodeEditor'
 import { SplitLayout } from './SplitLayout'
-import { GitPanel } from './GitPanel'
-import type { GitOverview, GitStatus, SessionRuntime, Settings, TerminalType } from '../types'
+import type { GitStatus, SessionRuntime, Settings, TerminalType } from '../types'
 
 interface WorkspacePanelsProps {
   sessions: SessionRuntime[]
@@ -12,8 +11,6 @@ interface WorkspacePanelsProps {
   settings: Settings
   broadcast: boolean
   gitStatus: GitStatus
-  gitOverview: GitOverview
-  gitPanelOpen: boolean
   explorerNonce: number
   onSelectSession: (id: string) => void
   onCloseSession: (id: string) => void
@@ -24,8 +21,6 @@ interface WorkspacePanelsProps {
   onOpenFile: (path: string) => void
   onOpenTerminalHere: (cwd: string, type: TerminalType) => void
   onRefresh: () => void
-  onRefreshGit: () => void
-  onFetchGit: () => void
   onChangeContent: (path: string, content: string) => void
   onSaveFile: () => void
   onSelectFile: (path: string) => void
@@ -40,8 +35,6 @@ export function WorkspacePanels({
   settings,
   broadcast,
   gitStatus,
-  gitOverview,
-  gitPanelOpen,
   explorerNonce,
   onSelectSession,
   onCloseSession,
@@ -52,8 +45,6 @@ export function WorkspacePanels({
   onOpenFile,
   onOpenTerminalHere,
   onRefresh,
-  onRefreshGit,
-  onFetchGit,
   onChangeContent,
   onSaveFile,
   onSelectFile,
@@ -80,26 +71,16 @@ export function WorkspacePanels({
         />
 
         <SplitLayout direction="vertical" initial={320} min={120}>
-          <div className="workspace-side">
-            <FileExplorer
-              rootPath={activeSession?.cwd ?? null}
-              hiddenFolders={settings.hiddenFolders}
-              gitFiles={gitStatus.files}
-              onOpenFile={onOpenFile}
-              onOpenGitDiff={onOpenGitDiff}
-              onOpenTerminalHere={onOpenTerminalHere}
-              refreshNonce={explorerNonce}
-              onRefresh={onRefresh}
-            />
-            {gitPanelOpen && (
-              <GitPanel
-                overview={gitOverview}
-                onRefresh={onRefreshGit}
-                onFetch={onFetchGit}
-                onOpenDiff={onOpenGitDiff}
-              />
-            )}
-          </div>
+          <FileExplorer
+            rootPath={activeSession?.cwd ?? null}
+            hiddenFolders={settings.hiddenFolders}
+            gitFiles={gitStatus.files}
+            onOpenFile={onOpenFile}
+            onOpenGitDiff={onOpenGitDiff}
+            onOpenTerminalHere={onOpenTerminalHere}
+            refreshNonce={explorerNonce}
+            onRefresh={onRefresh}
+          />
           <CodeEditor
             session={activeSession}
             theme={monacoTheme}

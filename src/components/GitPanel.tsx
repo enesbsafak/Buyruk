@@ -7,6 +7,8 @@ interface GitPanelProps {
   onRefresh: () => void
   onFetch: () => void
   onOpenDiff: (path: string) => void
+  onClose?: () => void
+  floating?: boolean
 }
 
 function changeKind(change: GitChange): { label: string; cls: string } {
@@ -32,15 +34,34 @@ function GitMeta({ overview }: { overview: GitOverview }) {
   )
 }
 
-export function GitPanel({ overview, onRefresh, onFetch, onOpenDiff }: GitPanelProps) {
+export function GitPanel({
+  overview,
+  onRefresh,
+  onFetch,
+  onOpenDiff,
+  onClose,
+  floating = false
+}: GitPanelProps) {
+  const panelClass = `git-panel ${floating ? 'is-floating' : ''}`
+
   if (!overview.isRepo) {
     return (
-      <aside className="git-panel">
+      <aside className={panelClass} aria-label="Git paneli">
         <div className="git-panel-head">
-          <span className="panel-label">Git</span>
-          <button type="button" className="icon-btn" title="Yenile" onClick={onRefresh}>
-            <Icon name="refresh" size={14} />
-          </button>
+          <div className="git-title">
+            <Icon name="git-diff" size={15} />
+            <span>Git</span>
+          </div>
+          <div className="git-actions">
+            <button type="button" className="icon-btn" title="Yenile" onClick={onRefresh}>
+              <Icon name="refresh" size={14} />
+            </button>
+            {onClose && (
+              <button type="button" className="icon-btn" title="Kapat" onClick={onClose}>
+                <Icon name="close" size={14} />
+              </button>
+            )}
+          </div>
         </div>
         <div className="git-empty">Git deposu değil</div>
       </aside>
@@ -48,7 +69,7 @@ export function GitPanel({ overview, onRefresh, onFetch, onOpenDiff }: GitPanelP
   }
 
   return (
-    <aside className="git-panel">
+    <aside className={panelClass} aria-label="Git paneli">
       <div className="git-panel-head">
         <div className="git-title">
           <Icon name="git-diff" size={15} />
@@ -61,6 +82,11 @@ export function GitPanel({ overview, onRefresh, onFetch, onOpenDiff }: GitPanelP
           <button type="button" className="icon-btn" title="Yenile" onClick={onRefresh}>
             <Icon name="refresh" size={14} />
           </button>
+          {onClose && (
+            <button type="button" className="icon-btn" title="Kapat" onClick={onClose}>
+              <Icon name="close" size={14} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -100,6 +126,7 @@ export function GitPanel({ overview, onRefresh, onFetch, onOpenDiff }: GitPanelP
             <span>Son commitler</span>
           </div>
           <div className="git-list">
+            {overview.recentCommits.length === 0 && <div className="git-empty">Commit kaydı yok</div>}
             {overview.recentCommits.map((commit) => (
               <div className="git-commit" key={commit.hash}>
                 <span className="git-hash">{commit.hash}</span>

@@ -1,4 +1,4 @@
-export type TerminalType = 'cmd' | 'powershell' | 'claude' | 'codex'
+export type TerminalType = 'cmd' | 'powershell' | 'claude' | 'codex' | 'opencode'
 
 export interface TerminalSession {
   id: string
@@ -99,6 +99,7 @@ export interface Settings {
   powershellCommand: string
   claudeCommand: string
   codexCommand: string
+  opencodeCommand: string
   hiddenFolders: string[]
   terminalFont: string
   terminalFontSize: number

@@ -1,11 +1,17 @@
-import { useEffect, useRef, useState } from 'react'
-import { Terminal } from '@xterm/xterm'
-import { FitAddon } from '@xterm/addon-fit'
-import { SearchAddon } from '@xterm/addon-search'
+import { useCallback, useId, useRef, useState } from 'react'
 import '@xterm/xterm/css/xterm.css'
-import { Icon } from './Icon'
-import { CliIcon } from './CliIcon'
-import { terminalBus } from '../terminalBus'
+import {
+  TerminalExitOverlay,
+  TerminalFollowButton,
+  TerminalPaneHeader,
+  TerminalScrollRail,
+  TerminalSearchBar
+} from './TerminalPaneControls'
+import {
+  INITIAL_TERMINAL_SCROLL,
+  useXtermSession,
+  type TerminalScrollState
+} from '../hooks/useXtermSession'
 import type { SessionRuntime } from '../types'
 
 interface TerminalPaneProps {
@@ -23,6 +29,10 @@ interface TerminalPaneProps {
   onBell: (id: string) => void
 }
 
+function sameScrollState(a: TerminalScrollState, b: TerminalScrollState) {
+  return a.viewportY === b.viewportY && a.baseY === b.baseY && a.rows === b.rows
+}
+
 export function TerminalPane({
   session,
   active,
@@ -37,150 +47,44 @@ export function TerminalPane({
   onInput,
   onBell
 }: TerminalPaneProps) {
+  const terminalBodyId = useId()
   const hostRef = useRef<HTMLDivElement>(null)
-  const termRef = useRef<Terminal | null>(null)
-  const fitRef = useRef<FitAddon | null>(null)
-  const searchRef = useRef<SearchAddon | null>(null)
-  const onInputRef = useRef(onInput)
-  onInputRef.current = onInput
-  const onBellRef = useRef(onBell)
-  onBellRef.current = onBell
-
   const [showSearch, setShowSearch] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
+  const [scrollState, setScrollState] = useState(INITIAL_TERMINAL_SCROLL)
 
-  // Recreate the terminal on id/restart/font changes.
-  useEffect(() => {
-    if (!hostRef.current) return
+  const handleScrollStateChange = useCallback((next: TerminalScrollState) => {
+    setScrollState((prev) => (sameScrollState(prev, next) ? prev : next))
+  }, [])
 
-    const term = new Terminal({
-      cursorBlink: true,
-      fontFamily,
-      fontSize,
-      lineHeight: 1.2,
-      scrollback: 8000,
-      allowProposedApi: true,
-      theme: {
-        background: '#15161e',
-        foreground: '#c0caf5',
-        cursor: '#c0caf5',
-        cursorAccent: '#15161e',
-        selectionBackground: '#28344a',
-        black: '#15161e',
-        red: '#f7768e',
-        green: '#9ece6a',
-        yellow: '#e0af68',
-        blue: '#7aa2f7',
-        magenta: '#bb9af7',
-        cyan: '#7dcfff',
-        white: '#a9b1d6',
-        brightBlack: '#414868',
-        brightRed: '#f7768e',
-        brightGreen: '#9ece6a',
-        brightYellow: '#e0af68',
-        brightBlue: '#7aa2f7',
-        brightMagenta: '#bb9af7',
-        brightCyan: '#7dcfff',
-        brightWhite: '#c0caf5'
-      }
-    })
-    const fit = new FitAddon()
-    const search = new SearchAddon()
-    term.loadAddon(fit)
-    term.loadAddon(search)
-    term.open(hostRef.current)
-    termRef.current = term
-    fitRef.current = fit
-    searchRef.current = search
+  const openSearch = useCallback(() => {
+    setShowSearch(true)
+  }, [])
 
-    try {
-      fit.fit()
-    } catch {
-      // host may have zero size initially
-    }
+  const { searchRef, focusTerminal, scrollToBottom, scrollToLine } = useXtermSession({
+    hostRef,
+    session,
+    fontFamily,
+    fontSize,
+    zoomed,
+    onInput,
+    onBell,
+    onOpenSearch: openSearch,
+    onScrollStateChange: handleScrollStateChange
+  })
 
-    const onData = term.onData((data) => onInputRef.current(session.id, data))
-    const onBellEvt = term.onBell(() => onBellRef.current(session.id))
-    const unsubscribe = terminalBus.subscribe(session.id, (data) => term.write(data))
-    window.api.resizeTerminal(session.id, term.cols, term.rows)
+  const closeSearch = useCallback(() => {
+    setShowSearch(false)
+    focusTerminal()
+  }, [focusTerminal])
 
-    // Ctrl/Cmd+F opens search. Ctrl/Cmd+V pastes text first; image-only clipboard
-    // paste in Claude Code maps to Alt+V.
-    term.attachCustomKeyEventHandler((e) => {
-      const hasPrimaryModifier = e.ctrlKey || e.metaKey
-      const key = e.key.toLowerCase()
-
-      if (e.type === 'keydown' && hasPrimaryModifier && key === 'f') {
-        setShowSearch(true)
-        return false
-      }
-
-      if (
-        e.type === 'keydown' &&
-        hasPrimaryModifier &&
-        !e.altKey &&
-        !e.shiftKey &&
-        key === 'v'
-      ) {
-        const text = window.api.clipboardReadText()
-        if (text) {
-          term.paste(text)
-          return false
-        }
-
-        if (session.type === 'claude' && window.api.clipboardHasImage()) {
-          onInputRef.current(session.id, '\x1bv')
-          return false
-        }
-      }
-
-      return true
-    })
-
-    const resizeObserver = new ResizeObserver(() => {
-      try {
-        fit.fit()
-        window.api.resizeTerminal(session.id, term.cols, term.rows)
-      } catch {
-        // ignore transient resize errors
-      }
-    })
-    resizeObserver.observe(hostRef.current)
-
-    return () => {
-      onData.dispose()
-      onBellEvt.dispose()
-      unsubscribe()
-      resizeObserver.disconnect()
-      term.dispose()
-    }
-  }, [fontFamily, fontSize, session.id, session.gen, session.type])
-
-  useEffect(() => {
-    const term = termRef.current
-    if (!term) return
-    term.options.fontFamily = fontFamily
-    term.options.fontSize = fontSize
-    try {
-      fitRef.current?.fit()
-      window.api.resizeTerminal(session.id, term.cols, term.rows)
-    } catch {
-      // ignore
-    }
-  }, [fontFamily, fontSize, session.id])
-
-  // Refit when zoom state flips (size changes substantially).
-  useEffect(() => {
-    requestAnimationFrame(() => {
-      try {
-        fitRef.current?.fit()
-        const term = termRef.current
-        if (term) window.api.resizeTerminal(session.id, term.cols, term.rows)
-      } catch {
-        // ignore
-      }
-    })
-  }, [zoomed, session.id])
+  const changeSearchTerm = useCallback(
+    (value: string) => {
+      setSearchTerm(value)
+      if (value) searchRef.current?.findNext(value, { incremental: true })
+    },
+    [searchRef]
+  )
 
   const exited = session.status === 'exited'
 
@@ -190,136 +94,38 @@ export function TerminalPane({
       aria-label={`Terminal ${session.title}`}
       onPointerDown={() => onSelect(session.id)}
     >
-      <div className="pane-head">
-        <CliIcon type={session.type} size={15} />
-        <span
-          className="pane-title"
-          title={`${session.cwd}  ·  başlığı değiştirmek için çift tıkla`}
-          onDoubleClick={(e) => {
-            e.stopPropagation()
-            onRename(session)
-          }}
-        >
-          {session.title}
-        </span>
-        {exited && <span className="pane-flag">çıkış {session.exitCode ?? '?'}</span>}
-        <div className="pane-actions">
-          <button
-            type="button"
-            className={`pane-btn ${showSearch ? 'active' : ''}`}
-            title="Ara (Ctrl+F)"
-            onClick={(e) => {
-              e.stopPropagation()
-              setShowSearch((s) => !s)
-            }}
-          >
-            <Icon name="search" size={14} />
-          </button>
-          <button
-            type="button"
-            className="pane-btn"
-            title="Yeniden başlat"
-            onClick={(e) => {
-              e.stopPropagation()
-              onRestart(session)
-            }}
-          >
-            <Icon name="restart" size={14} />
-          </button>
-          <button
-            type="button"
-            className="pane-btn"
-            title={zoomed ? 'Küçült' : 'Büyüt'}
-            onClick={(e) => {
-              e.stopPropagation()
-              onToggleZoom(session.id)
-            }}
-          >
-            <Icon name={zoomed ? 'collapse' : 'expand'} size={14} />
-          </button>
-          <button
-            type="button"
-            className="pane-btn close"
-            title="Kapat"
-            onClick={(e) => {
-              e.stopPropagation()
-              onClose(session.id)
-            }}
-          >
-            <Icon name="close" size={14} />
-          </button>
-        </div>
-      </div>
+      <TerminalPaneHeader
+        session={session}
+        exited={exited}
+        showSearch={showSearch}
+        zoomed={zoomed}
+        onRename={onRename}
+        onRestart={onRestart}
+        onToggleZoom={onToggleZoom}
+        onClose={onClose}
+        onToggleSearch={() => setShowSearch((visible) => !visible)}
+      />
 
       {showSearch && (
-        <div className="pane-search" onMouseDown={(e) => e.stopPropagation()}>
-          <Icon name="search" size={13} />
-          <input
-            aria-label="Terminalde ara"
-            value={searchTerm}
-            placeholder="Terminalde ara…"
-            onChange={(e) => {
-              const value = e.target.value
-              setSearchTerm(value)
-              if (value) searchRef.current?.findNext(value, { incremental: true })
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                if (e.shiftKey) searchRef.current?.findPrevious(searchTerm)
-                else searchRef.current?.findNext(searchTerm)
-              }
-              if (e.key === 'Escape') {
-                setShowSearch(false)
-                termRef.current?.focus()
-              }
-            }}
-          />
-          <button
-            type="button"
-            className="pane-btn"
-            title="Önceki"
-            onClick={() => searchRef.current?.findPrevious(searchTerm)}
-          >
-            <Icon name="chevron" size={13} className="rot-up" />
-          </button>
-          <button
-            type="button"
-            className="pane-btn"
-            title="Sonraki"
-            onClick={() => searchRef.current?.findNext(searchTerm)}
-          >
-            <Icon name="chevron" size={13} className="rot-down" />
-          </button>
-          <button
-            type="button"
-            className="pane-btn"
-            title="Kapat"
-            onClick={() => {
-              setShowSearch(false)
-              termRef.current?.focus()
-            }}
-          >
-            <Icon name="close" size={13} />
-          </button>
-        </div>
+        <TerminalSearchBar
+          searchTerm={searchTerm}
+          searchRef={searchRef}
+          onSearchTermChange={changeSearchTerm}
+          onClose={closeSearch}
+        />
       )}
 
-      <div className="xterm-host" ref={hostRef} />
+      <div className="xterm-shell">
+        <div id={terminalBodyId} className="xterm-host" ref={hostRef} />
+        <TerminalScrollRail
+          controlsId={terminalBodyId}
+          scrollState={scrollState}
+          onScrollToLine={scrollToLine}
+        />
+        {!scrollState.atBottom && !exited && <TerminalFollowButton onClick={scrollToBottom} />}
+      </div>
 
-      {exited && (
-        <div className="pane-exit-overlay">
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={(e) => {
-              e.stopPropagation()
-              onRestart(session)
-            }}
-          >
-            <Icon name="restart" size={14} /> Yeniden başlat
-          </button>
-        </div>
-      )}
+      {exited && <TerminalExitOverlay session={session} onRestart={onRestart} />}
     </section>
   )
 }

@@ -28,7 +28,8 @@ const NEW_BUTTONS: { type: TerminalType; label: string }[] = [
   { type: 'cmd', label: 'CMD' },
   { type: 'powershell', label: 'PowerShell' },
   { type: 'claude', label: 'Claude' },
-  { type: 'codex', label: 'Codex' }
+  { type: 'codex', label: 'Codex' },
+  { type: 'opencode', label: 'OpenCode' }
 ]
 
 export function Toolbar({

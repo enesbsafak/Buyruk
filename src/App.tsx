@@ -44,6 +44,8 @@ function commandFor(type: TerminalType, settings: Settings): string {
       return settings.claudeCommand
     case 'codex':
       return settings.codexCommand
+    case 'opencode':
+      return settings.opencodeCommand
   }
 }
 
@@ -173,6 +175,7 @@ function useCommandList({
       { id: 'new-ps', label: 'Yeni PowerShell', icon: 'terminal', run: () => onNewTerminal('powershell') },
       { id: 'new-claude', label: 'Yeni Claude', icon: 'terminal', run: () => onNewTerminal('claude') },
       { id: 'new-codex', label: 'Yeni Codex', icon: 'terminal', run: () => onNewTerminal('codex') },
+      { id: 'new-opencode', label: 'Yeni OpenCode', icon: 'terminal', run: () => onNewTerminal('opencode') },
       { id: 'open-folder', label: 'Klasör Aç (workspace değiştir)', icon: 'folder', run: onOpenFolder },
       { id: 'new-folder', label: 'Yeni Klasör', icon: 'folder-plus', run: onNewFolder },
       { id: 'orchestrator', label: 'AI Orkestrasyon', icon: 'orchestrator', run: onOpenOrchestrator },

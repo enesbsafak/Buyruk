@@ -94,6 +94,16 @@ function SettingsModalContent({
         </label>
 
         <label className="field">
+          <span className="field-label">OpenCode komutu</span>
+          <input
+            className="field-input"
+            value={draft.opencodeCommand}
+            onChange={(e) => set('opencodeCommand', e.target.value)}
+            placeholder="opencode"
+          />
+        </label>
+
+        <label className="field">
           <span className="field-label">Terminal fontu (Nerd Font önerilir)</span>
           <input
             className="field-input"

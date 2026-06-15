@@ -1,7 +1,7 @@
 import type { Settings, TerminalType } from './types'
 
 export type AgentModelKind = 'built-in' | 'custom'
-export type AgentTerminalType = Extract<TerminalType, 'claude' | 'codex'> | 'custom'
+export type AgentTerminalType = Extract<TerminalType, 'claude' | 'codex' | 'opencode'> | 'custom'
 export type ApprovalPolicy = 'one' | 'majority' | 'all'
 export type ApplyMode = 'draft-only' | 'user-confirmed' | 'auto-after-approval'
 
@@ -28,7 +28,7 @@ export interface OrchestratorConfig {
   runChecks: boolean
 }
 
-const BUILT_IN_MODEL_IDS = ['claude', 'codex']
+const BUILT_IN_MODEL_IDS = ['claude', 'codex', 'opencode']
 const APPROVAL_POLICIES: ApprovalPolicy[] = ['one', 'majority', 'all']
 const APPLY_MODES: ApplyMode[] = ['draft-only', 'user-confirmed', 'auto-after-approval']
 
@@ -48,6 +48,14 @@ export function createDefaultOrchestratorConfig(settings: Settings): Orchestrato
       kind: 'built-in',
       terminalType: 'codex',
       command: settings.codexCommand,
+      enabled: true
+    },
+    {
+      id: 'opencode',
+      name: 'OpenCode',
+      kind: 'built-in',
+      terminalType: 'opencode',
+      command: settings.opencodeCommand,
       enabled: true
     }
   ]
@@ -83,7 +91,10 @@ function normalizeModel(model: Partial<AgentModelConfig>, fallback: AgentModelCo
   const kind: AgentModelKind = model.kind === 'custom' ? 'custom' : fallback.kind
   const fallbackTerminalType = kind === 'custom' ? 'custom' : fallback.terminalType
   const terminalType: AgentTerminalType =
-    model.terminalType === 'claude' || model.terminalType === 'codex' || model.terminalType === 'custom'
+    model.terminalType === 'claude' ||
+    model.terminalType === 'codex' ||
+    model.terminalType === 'opencode' ||
+    model.terminalType === 'custom'
       ? model.terminalType
       : fallbackTerminalType
 

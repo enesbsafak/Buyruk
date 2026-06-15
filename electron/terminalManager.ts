@@ -24,7 +24,7 @@ async function getPty(): Promise<typeof PtyType> {
   return ptyLib
 }
 
-export type TerminalType = 'cmd' | 'powershell' | 'claude' | 'codex'
+export type TerminalType = 'cmd' | 'powershell' | 'claude' | 'codex' | 'opencode'
 
 export interface CreateTerminalOptions {
   type: TerminalType
@@ -47,7 +47,8 @@ const TYPE_LABEL: Record<TerminalType, string> = {
   cmd: 'CMD',
   powershell: 'PowerShell',
   claude: 'Claude',
-  codex: 'Codex'
+  codex: 'Codex',
+  opencode: 'OpenCode'
 }
 
 export class TerminalManager {
@@ -91,7 +92,7 @@ export class TerminalManager {
   }
 
   // Decide which executable + args to spawn for each session type.
-  // cmd/powershell are launched directly. claude/codex are launched *inside* cmd.exe
+  // cmd/powershell are launched directly. AI CLIs are launched *inside* cmd.exe
   // with /k so that (a) PATH-resolved shims (.cmd) work, and (b) the terminal stays
   // alive after the CLI exits, and (c) "not recognized" errors are visible to the user.
   private resolveShell(options: CreateTerminalOptions): { file: string; args: string[] } {
@@ -103,6 +104,7 @@ export class TerminalManager {
         return { file: options.command || 'powershell.exe', args: [] }
       case 'claude':
       case 'codex':
+      case 'opencode':
         return { file: comspec, args: ['/k', options.command] }
       default:
         return { file: comspec, args: [] }

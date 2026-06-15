@@ -39,6 +39,7 @@ const APPLY_LABELS: Record<ApplyMode, string> = {
 const TERMINAL_TYPE_LABELS: Record<AgentTerminalType, string> = {
   claude: 'Claude',
   codex: 'Codex',
+  opencode: 'OpenCode',
   custom: 'Özel komut'
 }
 

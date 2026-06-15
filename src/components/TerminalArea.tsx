@@ -43,8 +43,8 @@ export function TerminalArea({
           </div>
           <div className="placeholder-title">Çalışmaya başla</div>
           <div className="placeholder-text">
-            CMD, PowerShell, Claude veya Codex oturumu açmak için bir klasör seç. Birden
-            fazla terminal açtığında otomatik olarak yan yana döşenir.
+            CMD, PowerShell, Claude, Codex veya OpenCode oturumu açmak için bir klasör
+            seç. Birden fazla terminal açtığında otomatik olarak yan yana döşenir.
           </div>
         </div>
       </div>
@@ -86,6 +86,7 @@ export function TerminalArea({
               }}
             >
               <TerminalPane
+                key={`${s.id}:${s.gen}`}
                 session={s}
                 active={s.id === activeId}
                 zoomed={s.id === zoom}
