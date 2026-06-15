@@ -136,9 +136,17 @@ export function ensureClaudeLimitBridge(): { settingsPath: string; snapshotPath:
 }
 
 export function withClaudeLimitBridge(command: string): string {
-  if (command.toLowerCase().includes('--settings')) return command
-  const { settingsPath } = ensureClaudeLimitBridge()
-  return `${command} --settings "${settingsPath}"`
+  const baseCommand = command.trim() || 'claude'
+  if (/(^|\s)--settings(\s|=|$)/i.test(baseCommand)) return baseCommand
+
+  try {
+    const { settingsPath } = ensureClaudeLimitBridge()
+    if (!existsSync(settingsPath)) return baseCommand
+    const quotedSettings = `"${settingsPath}"`
+    return `if exist ${quotedSettings} (call ${baseCommand} --settings ${quotedSettings}) else (call ${baseCommand})`
+  } catch {
+    return baseCommand
+  }
 }
 
 function emptyTool(

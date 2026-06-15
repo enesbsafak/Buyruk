@@ -7,7 +7,7 @@ import { TerminalManager } from './terminalManager'
 import { IPC } from './ipcChannels'
 import { loadWindowState, trackWindowState } from './windowState'
 import { registerUpdaterHandlers, startAutoUpdateCheck } from './updater'
-import { registerAiLimitHandlers } from './aiLimits'
+import { ensureClaudeLimitBridge, registerAiLimitHandlers } from './aiLimits'
 
 let mainWindow: BrowserWindow | null = null
 let allowClose = false
@@ -98,6 +98,11 @@ function registerWindowControls(): void {
 
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null) // remove the default top-left application menu
+  try {
+    ensureClaudeLimitBridge()
+  } catch (err) {
+    log.warn('Claude limit bridge could not be prepared', err)
+  }
   registerFileSystemHandlers(ipcMain, () => mainWindow)
   terminalManager.registerHandlers(ipcMain)
   registerAiLimitHandlers(ipcMain)
