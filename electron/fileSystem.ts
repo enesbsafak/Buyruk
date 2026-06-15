@@ -11,6 +11,7 @@ import { watch as fsWatch, type FSWatcher } from 'node:fs'
 import { execFile } from 'node:child_process'
 import path from 'node:path'
 import { IPC } from './ipcChannels'
+import type { GitChange, GitCommit, GitOverview, GitRemoteActivity } from '../src/types'
 
 function execGit(args: string[], cwd: string): Promise<string> {
   return new Promise((resolve) => {
@@ -32,6 +33,7 @@ export interface FileNode {
 const MAX_TEXT_SIZE = 5 * 1024 * 1024 // 5 MB
 const BINARY_SNIFF_BYTES = 8000
 const GIT_RENAME_ARROW = /^.* -> (.*)$/
+const FIELD_SEP = '\x1f'
 
 function toGitPath(filePath: string): string {
   return filePath.split(path.sep).join('/')
@@ -43,6 +45,120 @@ function relativeGitPath(repoRoot: string, filePath: string): string | null {
     return null
   }
   return toGitPath(relativePath)
+}
+
+function emptyGitOverview(root: string): GitOverview {
+  return {
+    isRepo: false,
+    root,
+    branch: '',
+    upstream: '',
+    ahead: 0,
+    behind: 0,
+    stashCount: 0,
+    changes: [],
+    recentCommits: [],
+    remoteActivity: [],
+    lastUpdated: Date.now()
+  }
+}
+
+function parseAheadBehind(value: string): { ahead: number; behind: number } {
+  const [aheadRaw, behindRaw] = value.trim().split(/\s+/)
+  return {
+    ahead: parseInt(aheadRaw, 10) || 0,
+    behind: parseInt(behindRaw, 10) || 0
+  }
+}
+
+function parsePorcelain(root: string, porcelain: string): GitChange[] {
+  const changes: GitChange[] = []
+  for (const line of porcelain.split('\n')) {
+    if (!line.trim()) continue
+
+    const x = line[0]
+    const y = line[1]
+    const status = line.slice(0, 2)
+    let file = line.slice(3)
+    file = GIT_RENAME_ARROW.exec(file)?.[1] ?? file
+    file = file.replace(/^"|"$/g, '')
+
+    changes.push({
+      path: toGitPath(file),
+      absolutePath: path.join(root, file),
+      status: status.trim() || status,
+      staged: x !== ' ' && x !== '?',
+      unstaged: y !== ' ' || status === '??',
+      untracked: status === '??'
+    })
+  }
+  return changes
+}
+
+function parseCommitLog(log: string): GitCommit[] {
+  return log
+    .split('\n')
+    .flatMap((line) => {
+      if (!line.trim()) return []
+      const [hash = '', author = '', relativeDate = '', subject = '', refs = ''] = line.split(FIELD_SEP)
+      return [{ hash, author, relativeDate, subject, refs }]
+    })
+}
+
+function parseRemoteActivity(log: string): GitRemoteActivity[] {
+  return log
+    .split('\n')
+    .flatMap((line) => {
+      if (!line.trim()) return []
+      const [name = '', hash = '', relativeDate = '', author = '', subject = ''] = line.split(FIELD_SEP)
+      return [{ name, hash, relativeDate, author, subject }]
+    })
+}
+
+async function getGitOverview(root: string): Promise<GitOverview> {
+  const repoRoot = (await execGit(['rev-parse', '--show-toplevel'], root)).trim()
+  if (!repoRoot) return emptyGitOverview(root)
+
+  const normalizedRoot = path.normalize(repoRoot)
+  const [branchRaw, upstreamRaw, porcelain, recentRaw, remoteRaw, stashRaw] =
+    await Promise.all([
+      execGit(['rev-parse', '--abbrev-ref', 'HEAD'], normalizedRoot),
+      execGit(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'], normalizedRoot),
+      execGit(['status', '--porcelain=v1', '--untracked-files=all'], normalizedRoot),
+      execGit(
+        ['log', '-n', '10', '--date=relative', `--pretty=format:%h${FIELD_SEP}%an${FIELD_SEP}%ar${FIELD_SEP}%s${FIELD_SEP}%D`],
+        normalizedRoot
+      ),
+      execGit(
+        [
+          'for-each-ref',
+          '--sort=-committerdate',
+          '--count=10',
+          `--format=%(refname:short)${FIELD_SEP}%(objectname:short)${FIELD_SEP}%(committerdate:relative)${FIELD_SEP}%(authorname)${FIELD_SEP}%(subject)`,
+          'refs/remotes'
+        ],
+        normalizedRoot
+      ),
+      execGit(['stash', 'list', '--format=%gd'], normalizedRoot)
+    ])
+
+  const upstream = upstreamRaw.trim()
+  const aheadBehind = upstream
+    ? parseAheadBehind(await execGit(['rev-list', '--left-right', '--count', `HEAD...${upstream}`], normalizedRoot))
+    : { ahead: 0, behind: 0 }
+
+  return {
+    isRepo: true,
+    root: normalizedRoot,
+    branch: branchRaw.trim(),
+    upstream,
+    ...aheadBehind,
+    stashCount: stashRaw.split('\n').filter(Boolean).length,
+    changes: parsePorcelain(normalizedRoot, porcelain),
+    recentCommits: parseCommitLog(recentRaw),
+    remoteActivity: parseRemoteActivity(remoteRaw),
+    lastUpdated: Date.now()
+  }
 }
 
 // A NUL byte in the first chunk is a reliable, cheap "this is binary" heuristic.
@@ -100,8 +216,10 @@ async function getGitDiff(root: string, filePath: string): Promise<string> {
   const relativePath = relativeGitPath(normalizedRepoRoot, path.normalize(filePath))
   if (!relativePath) return ''
 
-  const staged = await execGit(['diff', '--cached', '--no-ext-diff', '--', relativePath], normalizedRepoRoot)
-  const unstaged = await execGit(['diff', '--no-ext-diff', '--', relativePath], normalizedRepoRoot)
+  const [staged, unstaged] = await Promise.all([
+    execGit(['diff', '--cached', '--no-ext-diff', '--', relativePath], normalizedRepoRoot),
+    execGit(['diff', '--no-ext-diff', '--', relativePath], normalizedRepoRoot)
+  ])
 
   if (staged && unstaged) {
     return [`# Staged changes`, staged.trimEnd(), `# Working tree changes`, unstaged.trimEnd()].join(
@@ -313,5 +431,16 @@ export function registerFileSystemHandlers(
 
   ipcMain.handle(IPC.GIT_DIFF, async (_e, root: string, filePath: string): Promise<string> => {
     return getGitDiff(root, filePath)
+  })
+
+  ipcMain.handle(IPC.GIT_OVERVIEW, async (_e, root: string): Promise<GitOverview> => {
+    return getGitOverview(root)
+  })
+
+  ipcMain.handle(IPC.GIT_FETCH, async (_e, root: string): Promise<GitOverview> => {
+    const repoRoot = (await execGit(['rev-parse', '--show-toplevel'], root)).trim()
+    if (!repoRoot) return emptyGitOverview(root)
+    await execGit(['fetch', '--all', '--prune'], path.normalize(repoRoot))
+    return getGitOverview(repoRoot)
   })
 }

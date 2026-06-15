@@ -53,6 +53,45 @@ export interface GitStatus {
   files: Record<string, string>
 }
 
+export interface GitChange {
+  path: string
+  absolutePath: string
+  status: string
+  staged: boolean
+  unstaged: boolean
+  untracked: boolean
+}
+
+export interface GitCommit {
+  hash: string
+  author: string
+  relativeDate: string
+  subject: string
+  refs: string
+}
+
+export interface GitRemoteActivity {
+  name: string
+  hash: string
+  relativeDate: string
+  author: string
+  subject: string
+}
+
+export interface GitOverview {
+  isRepo: boolean
+  root: string
+  branch: string
+  upstream: string
+  ahead: number
+  behind: number
+  stashCount: number
+  changes: GitChange[]
+  recentCommits: GitCommit[]
+  remoteActivity: GitRemoteActivity[]
+  lastUpdated: number
+}
+
 export type ThemeName = 'dark' | 'light'
 
 export interface Settings {

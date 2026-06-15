@@ -1,6 +1,7 @@
 import { clipboard, contextBridge, ipcRenderer } from 'electron'
 import { IPC } from './ipcChannels'
 import type { AppUpdateStatus } from '../src/updateTypes'
+import type { GitOverview } from '../src/types'
 
 export interface FileNode {
   name: string
@@ -58,10 +59,14 @@ const api = {
     root: string
   ): Promise<{ isRepo: boolean; branch: string; files: Record<string, string> }> =>
     ipcRenderer.invoke(IPC.GIT_STATUS, root),
+  gitOverview: (root: string): Promise<GitOverview> =>
+    ipcRenderer.invoke(IPC.GIT_OVERVIEW, root),
   gitDiff: (root: string, filePath: string): Promise<string> =>
     ipcRenderer.invoke(IPC.GIT_DIFF, root, filePath),
+  gitFetch: (root: string): Promise<GitOverview> => ipcRenderer.invoke(IPC.GIT_FETCH, root),
 
   // ---- Clipboard ----
+  clipboardReadText: (): string => clipboard.readText(),
   clipboardHasImage: (): boolean => !clipboard.readImage().isEmpty(),
 
   // ---- Terminal ----

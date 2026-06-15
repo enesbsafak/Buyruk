@@ -1,6 +1,7 @@
 import type {
   CreateTerminalOptions,
   FileNode,
+  GitOverview,
   TerminalSession
 } from './types'
 import type { AppUpdateStatus } from './updateTypes'
@@ -27,9 +28,12 @@ declare global {
       gitStatus(
         root: string
       ): Promise<{ isRepo: boolean; branch: string; files: Record<string, string> }>
+      gitOverview(root: string): Promise<GitOverview>
       gitDiff(root: string, filePath: string): Promise<string>
+      gitFetch(root: string): Promise<GitOverview>
 
       // Clipboard
+      clipboardReadText(): string
       clipboardHasImage(): boolean
 
       // Terminal

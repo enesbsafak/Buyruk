@@ -8,6 +8,9 @@ interface StatusBarProps {
   statusMessage: string
   gitBranch: string | null
   updateStatus: AppUpdateStatus
+  orchestratorSummary: string
+  orchestratorEnabled: boolean
+  onOpenOrchestrator: () => void
   onCheckForUpdates: () => void
   onInstallUpdate: () => void
 }
@@ -18,6 +21,9 @@ export function StatusBar({
   statusMessage,
   gitBranch,
   updateStatus,
+  orchestratorSummary,
+  orchestratorEnabled,
+  onOpenOrchestrator,
   onCheckForUpdates,
   onInstallUpdate
 }: StatusBarProps) {
@@ -61,6 +67,16 @@ export function StatusBar({
         <Icon name="terminal" size={13} />
         {terminalCount} terminal
       </span>
+
+      <button
+        type="button"
+        className={`status-item status-link ${orchestratorEnabled ? 'is-on' : ''}`}
+        title={orchestratorSummary}
+        onClick={onOpenOrchestrator}
+      >
+        <Icon name="orchestrator" size={13} />
+        <span>{orchestratorEnabled ? 'AI açık' : 'AI kapalı'}</span>
+      </button>
 
       <span className={`status-item update-status update-${updateStatus.state}`} title={updateStatus.error}>
         <Icon name="refresh" size={13} />

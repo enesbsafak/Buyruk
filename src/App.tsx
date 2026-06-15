@@ -1,17 +1,12 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
-import { Toolbar } from './components/Toolbar'
-import { TerminalArea } from './components/TerminalArea'
-import { FileExplorer } from './components/FileExplorer'
-import { CodeEditor } from './components/CodeEditor'
-import { SettingsModal } from './components/SettingsModal'
-import { StatusBar } from './components/StatusBar'
-import { SplitLayout } from './components/SplitLayout'
-import { QuickOpen } from './components/QuickOpen'
-import { CommandPalette, type Command } from './components/CommandPalette'
+import { AppView } from './components/AppView'
+import type { Command } from './components/CommandPalette'
 import { useDialog } from './components/DialogProvider'
 import { useSessions } from './hooks/useSessions'
 import { useSettings } from './hooks/useSettings'
+import { useOrchestrator } from './hooks/useOrchestrator'
 import { terminalBus } from './terminalBus'
+import { describeOrchestratorConfig } from './orchestrator'
 import { getLanguage, isImageFile } from './utils/language'
 import { basename, joinPath } from './utils/pathUtils'
 import {
@@ -22,9 +17,22 @@ import {
   type RecentFolder
 } from './utils/persistence'
 import { INITIAL_UPDATE_STATUS, type AppUpdateStatus } from './updateTypes'
-import type { GitStatus, SessionRuntime, Settings, TerminalType } from './types'
+import type { GitOverview, GitStatus, SessionRuntime, Settings, TerminalType } from './types'
 
 const EMPTY_GIT: GitStatus = { isRepo: false, branch: '', files: {} }
+const EMPTY_GIT_OVERVIEW: GitOverview = {
+  isRepo: false,
+  root: '',
+  branch: '',
+  upstream: '',
+  ahead: 0,
+  behind: 0,
+  stashCount: 0,
+  changes: [],
+  recentCommits: [],
+  remoteActivity: [],
+  lastUpdated: 0
+}
 
 function commandFor(type: TerminalType, settings: Settings): string {
   switch (type) {
@@ -48,8 +56,11 @@ interface UiState {
   recents: RecentFolder[]
   broadcast: boolean
   gitStatus: GitStatus
+  gitOverview: GitOverview
+  gitPanelOpen: boolean
   quickOpenOpen: boolean
   paletteOpen: boolean
+  orchestratorOpen: boolean
   updateStatus: AppUpdateStatus
 }
 
@@ -60,8 +71,11 @@ type UiAction =
   | { type: 'set-recents'; recents: RecentFolder[] }
   | { type: 'toggle-broadcast' }
   | { type: 'set-git-status'; gitStatus: GitStatus }
+  | { type: 'set-git-overview'; gitOverview: GitOverview }
+  | { type: 'toggle-git-panel' }
   | { type: 'set-quick-open'; open: boolean }
   | { type: 'set-palette-open'; open: boolean }
+  | { type: 'set-orchestrator-open'; open: boolean }
   | { type: 'set-update-status'; status: AppUpdateStatus }
 
 function createInitialUiState(): UiState {
@@ -72,8 +86,11 @@ function createInitialUiState(): UiState {
     recents: loadRecents(),
     broadcast: false,
     gitStatus: EMPTY_GIT,
+    gitOverview: EMPTY_GIT_OVERVIEW,
+    gitPanelOpen: false,
     quickOpenOpen: false,
     paletteOpen: false,
+    orchestratorOpen: false,
     updateStatus: INITIAL_UPDATE_STATUS
   }
 }
@@ -92,10 +109,16 @@ function uiReducer(state: UiState, action: UiAction): UiState {
       return { ...state, broadcast: !state.broadcast }
     case 'set-git-status':
       return { ...state, gitStatus: action.gitStatus }
+    case 'set-git-overview':
+      return { ...state, gitOverview: action.gitOverview }
+    case 'toggle-git-panel':
+      return { ...state, gitPanelOpen: !state.gitPanelOpen }
     case 'set-quick-open':
       return { ...state, quickOpenOpen: action.open }
     case 'set-palette-open':
       return { ...state, paletteOpen: action.open }
+    case 'set-orchestrator-open':
+      return { ...state, orchestratorOpen: action.open }
     case 'set-update-status':
       return { ...state, updateStatus: action.status }
   }
@@ -113,149 +136,6 @@ function currentOpenFile(
   return fileByPath.get(filePath)
 }
 
-interface WorkspacePanelsProps {
-  sessions: SessionRuntime[]
-  activeId: string | null
-  activeSession: SessionRuntime | null
-  settings: Settings
-  broadcast: boolean
-  gitStatus: GitStatus
-  explorerNonce: number
-  onSelectSession: (id: string) => void
-  onCloseSession: (id: string) => void
-  onRestart: (session: SessionRuntime) => void
-  onRenameSession: (session: SessionRuntime) => void
-  onInput: (id: string, data: string) => void
-  onBell: (id: string) => void
-  onOpenFile: (path: string) => void
-  onOpenTerminalHere: (cwd: string, type: TerminalType) => void
-  onRefresh: () => void
-  onChangeContent: (path: string, content: string) => void
-  onSaveFile: () => void
-  onSelectFile: (path: string) => void
-  onCloseFile: (path: string) => void
-  onOpenGitDiff: (path: string) => void
-}
-
-function WorkspacePanels({
-  sessions,
-  activeId,
-  activeSession,
-  settings,
-  broadcast,
-  gitStatus,
-  explorerNonce,
-  onSelectSession,
-  onCloseSession,
-  onRestart,
-  onRenameSession,
-  onInput,
-  onBell,
-  onOpenFile,
-  onOpenTerminalHere,
-  onRefresh,
-  onChangeContent,
-  onSaveFile,
-  onSelectFile,
-  onCloseFile,
-  onOpenGitDiff
-}: WorkspacePanelsProps) {
-  const monacoTheme = settings.theme === 'light' ? 'vs' : 'tokyo-night'
-
-  return (
-    <div className="main">
-      <SplitLayout direction="horizontal" initial={760} min={260}>
-        <TerminalArea
-          sessions={sessions}
-          activeId={activeId}
-          fontFamily={settings.terminalFont}
-          fontSize={settings.terminalFontSize}
-          broadcast={broadcast}
-          onSelect={onSelectSession}
-          onClose={onCloseSession}
-          onRestart={onRestart}
-          onRename={onRenameSession}
-          onInput={onInput}
-          onBell={onBell}
-        />
-
-        <SplitLayout direction="vertical" initial={320} min={120}>
-          <FileExplorer
-            rootPath={activeSession?.cwd ?? null}
-            hiddenFolders={settings.hiddenFolders}
-            gitFiles={gitStatus.files}
-            onOpenFile={onOpenFile}
-            onOpenGitDiff={onOpenGitDiff}
-            onOpenTerminalHere={onOpenTerminalHere}
-            refreshNonce={explorerNonce}
-            onRefresh={onRefresh}
-          />
-          <CodeEditor
-            session={activeSession}
-            theme={monacoTheme}
-            onChangeContent={onChangeContent}
-            onSave={onSaveFile}
-            onSelectFile={onSelectFile}
-            onCloseFile={onCloseFile}
-          />
-        </SplitLayout>
-      </SplitLayout>
-    </div>
-  )
-}
-
-interface AppOverlaysProps {
-  quickOpenOpen: boolean
-  activeSession: SessionRuntime | null
-  hiddenFolders: string[]
-  commands: Command[]
-  paletteOpen: boolean
-  settingsOpen: boolean
-  settings: Settings
-  onPickFile: (path: string) => void
-  onCloseQuickOpen: () => void
-  onClosePalette: () => void
-  onSaveSettings: (settings: Settings) => void
-  onCloseSettings: () => void
-}
-
-function AppOverlays({
-  quickOpenOpen,
-  activeSession,
-  hiddenFolders,
-  commands,
-  paletteOpen,
-  settingsOpen,
-  settings,
-  onPickFile,
-  onCloseQuickOpen,
-  onClosePalette,
-  onSaveSettings,
-  onCloseSettings
-}: AppOverlaysProps) {
-  return (
-    <>
-      {quickOpenOpen && activeSession && (
-        <QuickOpen
-          root={activeSession.cwd}
-          hidden={hiddenFolders}
-          onPick={onPickFile}
-          onClose={onCloseQuickOpen}
-        />
-      )}
-
-      {paletteOpen && <CommandPalette commands={commands} onClose={onClosePalette} />}
-
-      <SettingsModal
-        open={settingsOpen}
-        settings={settings}
-        onSave={onSaveSettings}
-        onClose={onCloseSettings}
-      />
-    </>
-  )
-}
-
 interface UseCommandListOptions {
   activeSession: SessionRuntime | null
   broadcast: boolean
@@ -263,6 +143,8 @@ interface UseCommandListOptions {
   onNewTerminal: (type: TerminalType) => void
   onOpenFolder: () => void
   onNewFolder: () => void
+  onBroadcastPrompt: () => void
+  onOpenOrchestrator: () => void
   onSaveFile: () => void
   onCloseActive: () => void
   onRestart: (session: SessionRuntime) => void
@@ -277,6 +159,8 @@ function useCommandList({
   onNewTerminal,
   onOpenFolder,
   onNewFolder,
+  onBroadcastPrompt,
+  onOpenOrchestrator,
   onSaveFile,
   onCloseActive,
   onRestart,
@@ -291,10 +175,12 @@ function useCommandList({
       { id: 'new-codex', label: 'Yeni Codex', icon: 'terminal', run: () => onNewTerminal('codex') },
       { id: 'open-folder', label: 'Klasör Aç (workspace değiştir)', icon: 'folder', run: onOpenFolder },
       { id: 'new-folder', label: 'Yeni Klasör', icon: 'folder-plus', run: onNewFolder },
+      { id: 'orchestrator', label: 'AI Orkestrasyon', icon: 'orchestrator', run: onOpenOrchestrator },
       { id: 'quick-open', label: 'Hızlı Dosya Aç', hint: 'Ctrl+P', icon: 'search', run: () => activeSession && dispatchUi({ type: 'set-quick-open', open: true }) },
       { id: 'save', label: 'Dosyayı Kaydet', hint: 'Ctrl+S', icon: 'save', run: onSaveFile },
       { id: 'close-term', label: 'Aktif Terminali Kapat', icon: 'close', run: onCloseActive },
-      { id: 'broadcast', label: broadcast ? 'Broadcast Kapat' : 'Broadcast Aç', icon: 'broadcast', run: () => dispatchUi({ type: 'toggle-broadcast' }) },
+      { id: 'broadcast-send', label: 'Broadcast Gönder', icon: 'broadcast', run: onBroadcastPrompt },
+      { id: 'broadcast-mode', label: broadcast ? 'Broadcast Modunu Kapat' : 'Broadcast Modunu Aç', icon: 'broadcast', run: () => dispatchUi({ type: 'toggle-broadcast' }) },
       { id: 'theme', label: settings.theme === 'dark' ? 'Açık Temaya Geç' : 'Koyu Temaya Geç', icon: 'bolt', run: () => updateSettings({ ...settings, theme: settings.theme === 'dark' ? 'light' : 'dark' }) },
       { id: 'settings', label: 'Ayarlar', hint: 'Ctrl+,', icon: 'settings', run: () => dispatchUi({ type: 'set-settings-open', open: true }) }
     ]
@@ -314,6 +200,8 @@ function useCommandList({
     onNewTerminal,
     onOpenFolder,
     onNewFolder,
+    onBroadcastPrompt,
+    onOpenOrchestrator,
     onSaveFile,
     onCloseActive,
     onRestart,
@@ -387,11 +275,38 @@ function useTerminalController({
 
   const handleInput = useCallback((id: string, data: string) => {
     if (broadcastRef.current) {
-      for (const session of sessionsRef.current) window.api.writeTerminal(session.id, data)
+      for (const session of sessionsRef.current) {
+        window.api.writeTerminal(session.id, data)
+        if (session.type === 'codex' && data.endsWith('\r')) {
+          window.api.writeTerminal(session.id, '\r')
+        }
+      }
     } else {
       window.api.writeTerminal(id, data)
     }
   }, [sessionsRef])
+
+  const handleBroadcastPrompt = useCallback(async () => {
+    const targets = sessionsRef.current
+    if (targets.length === 0) {
+      dialog.notify('Broadcast için açık terminal yok.', 'info')
+      return
+    }
+
+    const message = await dialog.prompt({
+      title: 'Broadcast Gönder',
+      label: `${targets.length} terminale gönder`,
+      placeholder: 'Komut veya prompt',
+      confirmText: 'Gönder'
+    })
+    if (!message) return
+
+    for (const session of targets) {
+      window.api.writeTerminal(session.id, `${message}\r`)
+      if (session.type === 'codex') window.api.writeTerminal(session.id, '\r')
+    }
+    dispatchUi({ type: 'set-status-message', message: `${targets.length} terminale gönderildi` })
+  }, [dialog, dispatchUi, sessionsRef])
 
   useEffect(() => {
     const offData = window.api.onTerminalData((id, data) => terminalBus.push(id, data))
@@ -519,6 +434,7 @@ function useTerminalController({
 
   return {
     handleInput,
+    handleBroadcastPrompt,
     handleNewTerminal,
     handleOpenRecent,
     handleRestart,
@@ -584,17 +500,51 @@ function useFileController({
     const root = activeSession?.cwd
     if (!root) {
       dispatchUi({ type: 'set-git-status', gitStatus: EMPTY_GIT })
+      dispatchUi({ type: 'set-git-overview', gitOverview: EMPTY_GIT_OVERVIEW })
       return
     }
     let cancelled = false
-    window.api
-      .gitStatus(root)
-      .then((status) => !cancelled && dispatchUi({ type: 'set-git-status', gitStatus: status }))
+    Promise.all([window.api.gitStatus(root), window.api.gitOverview(root)])
+      .then(([status, overview]) => {
+        if (cancelled) return
+        dispatchUi({ type: 'set-git-status', gitStatus: status })
+        dispatchUi({ type: 'set-git-overview', gitOverview: overview })
+      })
       .catch(() => {})
     return () => {
       cancelled = true
     }
   }, [activeSession?.cwd, explorerNonce, dispatchUi])
+
+  const handleRefreshGit = useCallback(async () => {
+    const root = activeSessionRef.current?.cwd
+    if (!root) return
+    try {
+      const [status, overview] = await Promise.all([
+        window.api.gitStatus(root),
+        window.api.gitOverview(root)
+      ])
+      dispatchUi({ type: 'set-git-status', gitStatus: status })
+      dispatchUi({ type: 'set-git-overview', gitOverview: overview })
+      dispatchUi({ type: 'set-status-message', message: 'Git bilgisi yenilendi' })
+    } catch (err) {
+      dialog.notify(`Git bilgisi alınamadı: ${errMsg(err)}`, 'error')
+    }
+  }, [activeSessionRef, dialog, dispatchUi])
+
+  const handleFetchGit = useCallback(async () => {
+    const root = activeSessionRef.current?.cwd
+    if (!root) return
+    try {
+      const overview = await window.api.gitFetch(root)
+      const status = await window.api.gitStatus(root)
+      dispatchUi({ type: 'set-git-status', gitStatus: status })
+      dispatchUi({ type: 'set-git-overview', gitOverview: overview })
+      dispatchUi({ type: 'set-status-message', message: 'Git remote bilgisi güncellendi' })
+    } catch (err) {
+      dialog.notify(`Git fetch başarısız: ${errMsg(err)}`, 'error')
+    }
+  }, [activeSessionRef, dialog, dispatchUi])
 
   const handleOpenFolder = useCallback(async () => {
     if (!activeSession) {
@@ -752,13 +702,20 @@ function useFileController({
     saveActiveFile,
     handleChangeContent,
     handleSelectFile,
-    handleCloseFile
+    handleCloseFile,
+    handleRefreshGit,
+    handleFetchGit
   }
 }
 
-export function App() {
+function useAppModel() {
   const dialog = useDialog()
   const { settings, update: updateSettings } = useSettings()
+  const {
+    config: orchestratorConfig,
+    update: updateOrchestrator,
+    reset: resetOrchestrator
+  } = useOrchestrator(settings)
   const { sessions, activeId, activeSession, actions } = useSessions()
 
   const [ui, dispatchUi] = useReducer(uiReducer, undefined, createInitialUiState)
@@ -769,8 +726,11 @@ export function App() {
     recents,
     broadcast,
     gitStatus,
+    gitOverview,
+    gitPanelOpen,
     quickOpenOpen,
     paletteOpen,
+    orchestratorOpen,
     updateStatus
   } = ui
   const restoredRef = useRef(false)
@@ -784,9 +744,29 @@ export function App() {
   activeSessionRef.current = activeSession
 
   const bumpExplorer = useCallback(() => dispatchUi({ type: 'bump-explorer' }), [])
+  const openOrchestrator = useCallback(
+    () => dispatchUi({ type: 'set-orchestrator-open', open: true }),
+    []
+  )
+  const openSettings = useCallback(
+    () => dispatchUi({ type: 'set-settings-open', open: true }),
+    []
+  )
+  const toggleGitPanel = useCallback(() => dispatchUi({ type: 'toggle-git-panel' }), [])
+  const closeQuickOpen = useCallback(() => dispatchUi({ type: 'set-quick-open', open: false }), [])
+  const closePalette = useCallback(() => dispatchUi({ type: 'set-palette-open', open: false }), [])
+  const closeOrchestrator = useCallback(
+    () => dispatchUi({ type: 'set-orchestrator-open', open: false }),
+    []
+  )
+  const closeSettings = useCallback(
+    () => dispatchUi({ type: 'set-settings-open', open: false }),
+    []
+  )
 
   const {
     handleInput,
+    handleBroadcastPrompt,
     handleNewTerminal,
     handleOpenRecent,
     handleRestart,
@@ -814,7 +794,9 @@ export function App() {
     saveActiveFile,
     handleChangeContent,
     handleSelectFile,
-    handleCloseFile
+    handleCloseFile,
+    handleRefreshGit,
+    handleFetchGit
   } = useFileController({
     activeSession,
     activeSessionRef,
@@ -938,6 +920,27 @@ export function App() {
     [dialog, updateSettings]
   )
 
+  const handleSaveOrchestrator = useCallback(
+    (next: typeof orchestratorConfig) => {
+      updateOrchestrator(next)
+      dispatchUi({ type: 'set-orchestrator-open', open: false })
+      dispatchUi({ type: 'set-status-message', message: 'AI orkestrasyon kaydedildi' })
+      dialog.notify('AI orkestrasyon kaydedildi', 'success')
+    },
+    [dialog, updateOrchestrator]
+  )
+
+  const handleResetOrchestrator = useCallback(() => {
+    resetOrchestrator()
+    dispatchUi({ type: 'set-status-message', message: 'AI orkestrasyon varsayılana döndü' })
+    dialog.notify('AI orkestrasyon varsayılana döndü', 'info')
+  }, [dialog, resetOrchestrator])
+
+  const orchestratorSummary = useMemo(
+    () => describeOrchestratorConfig(orchestratorConfig),
+    [orchestratorConfig]
+  )
+
   const commands = useCommandList({
     activeSession,
     broadcast,
@@ -945,6 +948,8 @@ export function App() {
     onNewTerminal: handleNewTerminal,
     onOpenFolder: handleOpenFolder,
     onNewFolder: handleNewFolder,
+    onBroadcastPrompt: handleBroadcastPrompt,
+    onOpenOrchestrator: openOrchestrator,
     onSaveFile: saveActiveFile,
     onCloseActive: handleCloseActive,
     onRestart: handleRestart,
@@ -952,69 +957,63 @@ export function App() {
     dispatchUi
   })
 
-  return (
-    <div className="app">
-      <Toolbar
-        onNewTerminal={handleNewTerminal}
-        onOpenFolder={handleOpenFolder}
-        onNewFolder={handleNewFolder}
-        onCloseActive={handleCloseActive}
-        onOpenSettings={() => dispatchUi({ type: 'set-settings-open', open: true })}
-        hasActive={!!activeId}
-        recents={recents}
-        onOpenRecent={handleOpenRecent}
-        broadcast={broadcast}
-        onToggleBroadcast={() => dispatchUi({ type: 'toggle-broadcast' })}
-      />
+  return {
+    activeId,
+    activeSession,
+    broadcast,
+    closeOrchestrator,
+    closePalette,
+    closeQuickOpen,
+    closeSettings,
+    commands,
+    explorerNonce,
+    gitStatus,
+    gitOverview,
+    gitPanelOpen,
+    handleBell,
+    handleBroadcastPrompt,
+    handleChangeContent,
+    handleCheckForUpdates,
+    handleCloseActive,
+    handleCloseFile,
+    handleCloseSession,
+    handleInstallUpdate,
+    handleFetchGit,
+    handleInput,
+    handleNewFolder,
+    handleNewTerminal,
+    handleOpenFile,
+    handleOpenFolder,
+    handleOpenGitDiff,
+    handleOpenRecent,
+    handleOpenTerminalHere,
+    handleRenameSession,
+    handleResetOrchestrator,
+    handleRefreshGit,
+    handleRestart,
+    handleSaveOrchestrator,
+    handleSaveSettings,
+    handleSelectFile,
+    openOrchestrator,
+    openSettings,
+    orchestratorConfig,
+    orchestratorOpen,
+    orchestratorSummary,
+    paletteOpen,
+    quickOpenOpen,
+    recents,
+    saveActiveFile,
+    sessions,
+    settings,
+    settingsOpen,
+    statusMessage,
+    toggleGitPanel,
+    updateStatus,
+    setActiveSession: actions.setActive,
+    bumpExplorer
+  }
+}
 
-      <WorkspacePanels
-        sessions={sessions}
-        activeId={activeId}
-        activeSession={activeSession}
-        settings={settings}
-        broadcast={broadcast}
-        gitStatus={gitStatus}
-        explorerNonce={explorerNonce}
-        onSelectSession={actions.setActive}
-        onCloseSession={handleCloseSession}
-        onRestart={handleRestart}
-        onRenameSession={handleRenameSession}
-        onInput={handleInput}
-        onBell={handleBell}
-        onOpenFile={handleOpenFile}
-        onOpenTerminalHere={handleOpenTerminalHere}
-        onRefresh={bumpExplorer}
-        onChangeContent={handleChangeContent}
-        onSaveFile={saveActiveFile}
-        onSelectFile={handleSelectFile}
-        onCloseFile={handleCloseFile}
-        onOpenGitDiff={handleOpenGitDiff}
-      />
-
-      <StatusBar
-        activeSession={activeSession}
-        terminalCount={sessions.length}
-        statusMessage={statusMessage}
-        gitBranch={gitStatus.isRepo ? gitStatus.branch : null}
-        updateStatus={updateStatus}
-        onCheckForUpdates={handleCheckForUpdates}
-        onInstallUpdate={handleInstallUpdate}
-      />
-
-      <AppOverlays
-        quickOpenOpen={quickOpenOpen}
-        activeSession={activeSession}
-        hiddenFolders={settings.hiddenFolders}
-        commands={commands}
-        paletteOpen={paletteOpen}
-        settingsOpen={settingsOpen}
-        settings={settings}
-        onPickFile={handleOpenFile}
-        onCloseQuickOpen={() => dispatchUi({ type: 'set-quick-open', open: false })}
-        onClosePalette={() => dispatchUi({ type: 'set-palette-open', open: false })}
-        onSaveSettings={handleSaveSettings}
-        onCloseSettings={() => dispatchUi({ type: 'set-settings-open', open: false })}
-      />
-    </div>
-  )
+export function App() {
+  return <AppView {...useAppModel()} />
 }

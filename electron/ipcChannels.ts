@@ -17,7 +17,9 @@ export const IPC = {
   COPY_TEXT: 'fs:copyText',
   LIST_FILES: 'fs:listFiles',
   GIT_STATUS: 'fs:gitStatus',
+  GIT_OVERVIEW: 'fs:gitOverview',
   GIT_DIFF: 'fs:gitDiff',
+  GIT_FETCH: 'fs:gitFetch',
 
   // Terminal
   CREATE_TERMINAL: 'term:create',

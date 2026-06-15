@@ -12,11 +12,16 @@ interface ToolbarProps {
   onNewFolder: () => void
   onCloseActive: () => void
   onOpenSettings: () => void
+  onOpenOrchestrator: () => void
   hasActive: boolean
   recents: RecentFolder[]
   onOpenRecent: (recent: RecentFolder) => void
   broadcast: boolean
-  onToggleBroadcast: () => void
+  onBroadcastPrompt: () => void
+  gitChangeCount: number
+  gitPanelOpen: boolean
+  onToggleGitPanel: () => void
+  orchestratorEnabled: boolean
 }
 
 const NEW_BUTTONS: { type: TerminalType; label: string }[] = [
@@ -32,11 +37,16 @@ export function Toolbar({
   onNewFolder,
   onCloseActive,
   onOpenSettings,
+  onOpenOrchestrator,
   hasActive,
   recents,
   onOpenRecent,
   broadcast,
-  onToggleBroadcast
+  onBroadcastPrompt,
+  gitChangeCount,
+  gitPanelOpen,
+  onToggleGitPanel,
+  orchestratorEnabled
 }: ToolbarProps) {
   const [maximized, setMaximized] = useState(false)
   const [recentsOpen, setRecentsOpen] = useState(false)
@@ -111,6 +121,16 @@ export function Toolbar({
         <Icon name="folder-plus" />
         <span className="toolbar-label">Yeni Klasör</span>
       </button>
+      <button
+        type="button"
+        className={`btn btn-ghost toolbar-action toolbar-git no-drag ${gitPanelOpen ? 'is-on' : ''}`}
+        title="Git paneli"
+        onClick={onToggleGitPanel}
+      >
+        <Icon name="git-diff" />
+        <span className="toolbar-label">Git</span>
+        {gitChangeCount > 0 && <span className="toolbar-count">{gitChangeCount}</span>}
+      </button>
       <button type="button" className="btn btn-ghost toolbar-action no-drag" title="Terminali Kapat" onClick={onCloseActive} disabled={!hasActive}>
         <Icon name="close" />
         <span className="toolbar-label">Terminali Kapat</span>
@@ -121,10 +141,18 @@ export function Toolbar({
       <button
         type="button"
         className={`icon-btn no-drag ${broadcast ? 'is-on' : ''}`}
-        title={broadcast ? 'Broadcast açık: giriş tüm terminallere gider' : 'Broadcast: tüm terminallere gönder'}
-        onClick={onToggleBroadcast}
+        title={broadcast ? 'Broadcast modu açık: mesaj gönder' : 'Broadcast gönder'}
+        onClick={onBroadcastPrompt}
       >
         <Icon name="broadcast" size={17} />
+      </button>
+      <button
+        type="button"
+        className={`icon-btn no-drag ${orchestratorEnabled ? 'is-on' : ''}`}
+        title={orchestratorEnabled ? 'AI orkestrasyon açık' : 'AI orkestrasyon'}
+        onClick={onOpenOrchestrator}
+      >
+        <Icon name="orchestrator" size={17} />
       </button>
       <button type="button" className="icon-btn no-drag" title="Ayarlar" onClick={onOpenSettings}>
         <Icon name="settings" size={17} />

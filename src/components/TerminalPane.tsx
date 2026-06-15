@@ -104,7 +104,8 @@ export function TerminalPane({
     const unsubscribe = terminalBus.subscribe(session.id, (data) => term.write(data))
     window.api.resizeTerminal(session.id, term.cols, term.rows)
 
-    // Ctrl/Cmd+F opens search. Ctrl/Cmd+V maps image clipboard paste to Claude Code's Alt+V.
+    // Ctrl/Cmd+F opens search. Ctrl/Cmd+V pastes text first; image-only clipboard
+    // paste in Claude Code maps to Alt+V.
     term.attachCustomKeyEventHandler((e) => {
       const hasPrimaryModifier = e.ctrlKey || e.metaKey
       const key = e.key.toLowerCase()
@@ -119,12 +120,18 @@ export function TerminalPane({
         hasPrimaryModifier &&
         !e.altKey &&
         !e.shiftKey &&
-        key === 'v' &&
-        session.type === 'claude' &&
-        window.api.clipboardHasImage()
+        key === 'v'
       ) {
-        onInputRef.current(session.id, '\x1bv')
-        return false
+        const text = window.api.clipboardReadText()
+        if (text) {
+          term.paste(text)
+          return false
+        }
+
+        if (session.type === 'claude' && window.api.clipboardHasImage()) {
+          onInputRef.current(session.id, '\x1bv')
+          return false
+        }
       }
 
       return true

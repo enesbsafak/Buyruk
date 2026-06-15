@@ -32,7 +32,9 @@ export default defineConfig({
     })
   ],
   build: {
-    outDir: 'dist'
+    outDir: 'dist',
+    // Monaco is intentionally bundled for offline Electron use.
+    chunkSizeWarningLimit: 4096
   },
   server: {
     port: 5173

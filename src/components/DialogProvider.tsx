@@ -61,6 +61,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<DialogState>(null)
   const [toasts, setToasts] = useState<Toast[]>([])
   const resolver = useRef<((value: unknown) => void) | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const settle = (value: string | boolean | null) => {
     setState(null)
@@ -84,6 +85,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
           confirmText: options.confirmText,
           value: options.defaultValue ?? ''
         })
+        requestAnimationFrame(() => inputRef.current?.focus())
       }),
     confirm: (options) =>
       new Promise<boolean>((resolve) => {
@@ -121,6 +123,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
                 {state.label && <label className="dlg-label">{state.label}</label>}
                 <input
                   aria-label={state.label ?? state.title}
+                  ref={inputRef}
                   className="dlg-input"
                   value={state.value}
                   placeholder={state.placeholder}
