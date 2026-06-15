@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Icon } from './Icon'
 import { CliIcon } from './CliIcon'
+import { AiLimitsPopover } from './AiLimitsPopover'
 import { basename } from '../utils/pathUtils'
 import brandLogo from '../assets/icon.png'
 import type { RecentFolder } from '../utils/persistence'
-import type { TerminalType } from '../types'
+import type { AiLimitsOverview, TerminalType } from '../types'
 
 interface ToolbarProps {
   onNewTerminal: (type: TerminalType) => void
@@ -18,9 +19,13 @@ interface ToolbarProps {
   onOpenRecent: (recent: RecentFolder) => void
   broadcast: boolean
   onBroadcastPrompt: () => void
+  onUpdateAiTools: () => void
+  aiLimits: AiLimitsOverview
+  onRefreshAiLimits: () => void
   gitChangeCount: number
   gitPanelOpen: boolean
   onToggleGitPanel: () => void
+  gitPopover: ReactNode
   orchestratorEnabled: boolean
 }
 
@@ -44,14 +49,21 @@ export function Toolbar({
   onOpenRecent,
   broadcast,
   onBroadcastPrompt,
+  onUpdateAiTools,
+  aiLimits,
+  onRefreshAiLimits,
   gitChangeCount,
   gitPanelOpen,
   onToggleGitPanel,
+  gitPopover,
   orchestratorEnabled
 }: ToolbarProps) {
   const [maximized, setMaximized] = useState(false)
   const [recentsOpen, setRecentsOpen] = useState(false)
+  const [limitsOpen, setLimitsOpen] = useState(false)
   const recentsRef = useRef<HTMLDivElement>(null)
+  const gitRef = useRef<HTMLDivElement>(null)
+  const limitsRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => window.api.windowControls.onMaximizedChange(setMaximized), [])
 
@@ -64,6 +76,29 @@ export function Toolbar({
     window.addEventListener('mousedown', onDown)
     return () => window.removeEventListener('mousedown', onDown)
   }, [recentsOpen])
+
+  useEffect(() => {
+    if (!gitPanelOpen) return
+    const onDown = (e: MouseEvent) => {
+      if (!gitRef.current?.contains(e.target as Node)) onToggleGitPanel()
+    }
+    window.addEventListener('mousedown', onDown)
+    return () => window.removeEventListener('mousedown', onDown)
+  }, [gitPanelOpen, onToggleGitPanel])
+
+  useEffect(() => {
+    if (!limitsOpen) return
+    const onDown = (e: MouseEvent) => {
+      if (!limitsRef.current?.contains(e.target as Node)) setLimitsOpen(false)
+    }
+    window.addEventListener('mousedown', onDown)
+    return () => window.removeEventListener('mousedown', onDown)
+  }, [limitsOpen])
+
+  const openLimits = () => {
+    if (!limitsOpen) onRefreshAiLimits()
+    setLimitsOpen((open) => !open)
+  }
 
   return (
     <header className="toolbar">
@@ -122,16 +157,20 @@ export function Toolbar({
         <Icon name="folder-plus" />
         <span className="toolbar-label">Yeni Klasör</span>
       </button>
-      <button
-        type="button"
-        className={`btn btn-ghost toolbar-action toolbar-git no-drag ${gitPanelOpen ? 'is-on' : ''}`}
-        title="Git paneli"
-        onClick={onToggleGitPanel}
-      >
-        <Icon name="git-diff" />
-        <span className="toolbar-label">Git</span>
-        {gitChangeCount > 0 && <span className="toolbar-count">{gitChangeCount}</span>}
-      </button>
+      <div className="toolbar-popover-wrap no-drag" ref={gitRef}>
+        <button
+          type="button"
+          className={`btn btn-ghost toolbar-action toolbar-git ${gitPanelOpen ? 'is-on' : ''}`}
+          title="Git paneli"
+          aria-expanded={gitPanelOpen}
+          onClick={onToggleGitPanel}
+        >
+          <Icon name="git-diff" />
+          <span className="toolbar-label">Git</span>
+          {gitChangeCount > 0 && <span className="toolbar-count">{gitChangeCount}</span>}
+        </button>
+        {gitPanelOpen && <div className="toolbar-popover git-popover">{gitPopover}</div>}
+      </div>
       <button type="button" className="btn btn-ghost toolbar-action no-drag" title="Terminali Kapat" onClick={onCloseActive} disabled={!hasActive}>
         <Icon name="close" />
         <span className="toolbar-label">Terminali Kapat</span>
@@ -139,6 +178,32 @@ export function Toolbar({
 
       <div className="toolbar-spacer" />
 
+      <button
+        type="button"
+        className="btn btn-ghost toolbar-action no-drag"
+        title="Codex, Claude ve OpenCode araçlarını güncelle"
+        onClick={onUpdateAiTools}
+      >
+        <Icon name="refresh" size={15} />
+        <span className="toolbar-label">AI Araçları Güncelle</span>
+      </button>
+      <div className="toolbar-popover-wrap no-drag" ref={limitsRef}>
+        <button
+          type="button"
+          className={`btn btn-ghost toolbar-action ${limitsOpen ? 'is-on' : ''}`}
+          title="Codex ve Claude limitleri"
+          aria-expanded={limitsOpen}
+          onClick={openLimits}
+        >
+          <Icon name="bolt" size={15} />
+          <span className="toolbar-label">Limitler</span>
+        </button>
+        {limitsOpen && (
+          <div className="toolbar-popover limits-popover">
+            <AiLimitsPopover overview={aiLimits} onRefresh={onRefreshAiLimits} />
+          </div>
+        )}
+      </div>
       <button
         type="button"
         className={`icon-btn no-drag ${broadcast ? 'is-on' : ''}`}

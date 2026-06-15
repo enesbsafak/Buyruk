@@ -1,7 +1,7 @@
 import { clipboard, contextBridge, ipcRenderer } from 'electron'
 import { IPC } from './ipcChannels'
 import type { AppUpdateStatus } from '../src/updateTypes'
-import type { GitOverview } from '../src/types'
+import type { AiLimitsOverview, GitOverview } from '../src/types'
 
 export interface FileNode {
   name: string
@@ -64,6 +64,10 @@ const api = {
   gitDiff: (root: string, filePath: string): Promise<string> =>
     ipcRenderer.invoke(IPC.GIT_DIFF, root, filePath),
   gitFetch: (root: string): Promise<GitOverview> => ipcRenderer.invoke(IPC.GIT_FETCH, root),
+
+  // ---- AI limits ----
+  getAiLimits: (options: { codexCommand?: string }): Promise<AiLimitsOverview> =>
+    ipcRenderer.invoke(IPC.AI_LIMITS_GET, options),
 
   // ---- Clipboard ----
   clipboardReadText: (): string => clipboard.readText(),

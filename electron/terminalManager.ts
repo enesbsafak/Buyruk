@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import type * as PtyType from 'node-pty'
 import { IPC } from './ipcChannels'
+import { withClaudeLimitBridge } from './aiLimits'
 
 // Load node-pty lazily so the app still launches (and shows its UI) even when the
 // native binary hasn't been compiled yet. Errors only surface when a terminal is
@@ -53,6 +54,8 @@ const TYPE_LABEL: Record<TerminalType, string> = {
 
 export class TerminalManager {
   private terminals = new Map<string, PtyType.IPty>()
+  private writeQueues = new Map<string, string[]>()
+  private writeTimers = new Map<string, NodeJS.Timeout>()
   private window: BrowserWindow | null = null
 
   attachWindow(win: BrowserWindow): void {
@@ -103,6 +106,7 @@ export class TerminalManager {
       case 'powershell':
         return { file: options.command || 'powershell.exe', args: [] }
       case 'claude':
+        return { file: comspec, args: ['/k', withClaudeLimitBridge(options.command || 'claude')] }
       case 'codex':
       case 'opencode':
         return { file: comspec, args: ['/k', options.command] }
@@ -131,6 +135,7 @@ export class TerminalManager {
 
     ptyProcess.onExit(({ exitCode }) => {
       this.post(IPC.TERMINAL_EXIT, id, exitCode)
+      this.clearWriteQueue(id)
       this.terminals.delete(id)
     })
   }
@@ -163,7 +168,69 @@ export class TerminalManager {
   }
 
   private write(id: string, data: string): void {
-    this.terminals.get(id)?.write(data)
+    const term = this.terminals.get(id)
+    if (!term) return
+    const activeQueue = this.writeQueues.get(id)
+    if (!activeQueue && data.length <= 1024) {
+      term.write(data)
+      return
+    }
+
+    const queue = activeQueue ?? []
+    queue.push(...this.chunkWrite(data))
+    this.writeQueues.set(id, queue)
+    this.flushWriteQueue(id)
+  }
+
+  private chunkWrite(data: string): string[] {
+    const chunks: string[] = []
+    let current = ''
+    for (const char of data) {
+      if (current.length + char.length > 1024) {
+        chunks.push(current)
+        current = ''
+      }
+      current += char
+    }
+    if (current) chunks.push(current)
+    return chunks
+  }
+
+  private flushWriteQueue(id: string): void {
+    if (this.writeTimers.has(id)) return
+    const queue = this.writeQueues.get(id)
+    if (!queue || queue.length === 0) {
+      this.writeQueues.delete(id)
+      return
+    }
+
+    const tick = () => {
+      const term = this.terminals.get(id)
+      const currentQueue = this.writeQueues.get(id)
+      if (!term || !currentQueue || currentQueue.length === 0) {
+        this.clearWriteQueue(id)
+        return
+      }
+
+      const next = currentQueue.shift()
+      if (next) term.write(next)
+
+      if (currentQueue.length === 0) {
+        this.clearWriteQueue(id)
+        return
+      }
+
+      this.writeTimers.set(id, setTimeout(tick, 2))
+    }
+
+    this.writeTimers.set(id, setTimeout(tick, 0))
+  }
+
+  private clearWriteQueue(id: string): void {
+    const timer = this.writeTimers.get(id)
+    if (timer) clearTimeout(timer)
+    this.writeTimers.delete(id)
+    this.writeQueues.delete(id)
   }
 
   private resize(id: string, cols: number, rows: number): void {
@@ -184,16 +251,18 @@ export class TerminalManager {
     } catch {
       // already gone
     }
+    this.clearWriteQueue(id)
     this.terminals.delete(id)
   }
 
   killAll(): void {
-    for (const term of this.terminals.values()) {
+    for (const [id, term] of this.terminals) {
       try {
         term.kill()
       } catch {
         // ignore
       }
+      this.clearWriteQueue(id)
     }
     this.terminals.clear()
   }

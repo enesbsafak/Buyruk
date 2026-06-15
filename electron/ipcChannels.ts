@@ -21,6 +21,9 @@ export const IPC = {
   GIT_DIFF: 'fs:gitDiff',
   GIT_FETCH: 'fs:gitFetch',
 
+  // AI tool limits
+  AI_LIMITS_GET: 'aiLimits:get',
+
   // Terminal
   CREATE_TERMINAL: 'term:create',
   RESTART_TERMINAL: 'term:restart',

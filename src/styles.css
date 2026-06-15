@@ -277,6 +277,30 @@ button {
   border-color: var(--accent-border);
   color: var(--accent);
 }
+.toolbar-action.is-on {
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+.toolbar-popover-wrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+.toolbar-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 520;
+  width: min(520px, calc(100vw - 24px));
+  max-height: calc(100vh - 88px);
+}
+.git-popover {
+  transform-origin: top right;
+}
+.limits-popover {
+  width: min(430px, calc(100vw - 24px));
+  transform-origin: top right;
+}
 .toolbar-count {
   display: inline-grid;
   place-items: center;
@@ -289,6 +313,134 @@ button {
   font-size: 10px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+
+/* ---------- AI limits popover ---------- */
+.ai-limits-panel {
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-1);
+  box-shadow: var(--shadow-lg);
+}
+.ai-limits-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 8px 7px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-2);
+}
+.ai-limits-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+}
+.ai-limits-title svg {
+  color: var(--accent);
+}
+.ai-limits-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: min(520px, calc(100vh - 134px));
+  overflow: auto;
+  padding: 9px;
+}
+.ai-limit-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-0);
+  padding: 9px;
+}
+.ai-limit-card.limit-error {
+  border-color: rgba(247, 118, 142, 0.26);
+}
+.ai-limit-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.ai-limit-name {
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 650;
+}
+.ai-limit-detail,
+.ai-limit-updated,
+.ai-limit-window-meta,
+.ai-limit-empty {
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
+.ai-limit-state {
+  align-self: flex-start;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 6px;
+  color: var(--text-muted);
+  background: var(--bg-1);
+  font-size: 10px;
+  font-weight: 700;
+}
+.ai-limit-state.ready {
+  color: var(--success);
+  border-color: rgba(158, 206, 106, 0.28);
+  background: rgba(158, 206, 106, 0.08);
+}
+.ai-limit-state.error {
+  color: var(--danger);
+  border-color: rgba(247, 118, 142, 0.28);
+  background: var(--danger-soft);
+}
+.ai-limit-windows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ai-limit-window-top,
+.ai-limit-window-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ai-limit-window-top {
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 600;
+}
+.ai-limit-window-top strong {
+  color: var(--text);
+  font-size: 11.5px;
+}
+.ai-limit-bar {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--bg-3);
+  margin: 5px 0;
+}
+.ai-limit-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--warning));
+}
+.ai-limit-empty {
+  padding: 8px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-1);
+}
+.ai-limit-updated {
+  margin-top: 8px;
 }
 
 /* ---------- Buttons ---------- */
@@ -909,14 +1061,6 @@ button {
 }
 
 /* ---------- Git panel ---------- */
-.git-drawer-layer {
-  position: fixed;
-  inset: 46px 0 28px 0;
-  z-index: 180;
-  background: rgba(10, 11, 18, 0.18);
-  pointer-events: auto;
-}
-
 .git-panel {
   display: flex;
   flex: 0 0 268px;
@@ -925,12 +1069,9 @@ button {
   border-top: 1px solid var(--border-strong);
   background: var(--bg-1);
 }
-.git-panel.is-floating {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  bottom: 10px;
-  width: min(430px, calc(100vw - 20px));
+.git-panel.is-popover {
+  width: 100%;
+  max-height: min(620px, calc(100vh - 88px));
   min-height: 0;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);

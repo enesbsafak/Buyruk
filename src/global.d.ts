@@ -1,5 +1,6 @@
 import type {
   CreateTerminalOptions,
+  AiLimitsOverview,
   FileNode,
   GitOverview,
   TerminalSession
@@ -31,6 +32,7 @@ declare global {
       gitOverview(root: string): Promise<GitOverview>
       gitDiff(root: string, filePath: string): Promise<string>
       gitFetch(root: string): Promise<GitOverview>
+      getAiLimits(options: { codexCommand?: string }): Promise<AiLimitsOverview>
 
       // Clipboard
       clipboardReadText(): string

@@ -92,6 +92,34 @@ export interface GitOverview {
   lastUpdated: number
 }
 
+export type AiLimitTool = 'codex' | 'claude'
+
+export type AiLimitStatus = 'loading' | 'ready' | 'unavailable' | 'error'
+
+export interface AiLimitWindow {
+  id: string
+  label: string
+  usedPercent: number
+  remainingPercent: number
+  windowDurationMins: number | null
+  resetsAt: number | null
+}
+
+export interface AiToolLimit {
+  tool: AiLimitTool
+  label: string
+  status: AiLimitStatus
+  detail: string
+  windows: AiLimitWindow[]
+  updatedAt: number | null
+  planType?: string | null
+}
+
+export interface AiLimitsOverview {
+  tools: AiToolLimit[]
+  lastUpdated: number
+}
+
 export type ThemeName = 'dark' | 'light'
 
 export interface Settings {

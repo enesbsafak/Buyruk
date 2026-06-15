@@ -17,7 +17,14 @@ import {
   type RecentFolder
 } from './utils/persistence'
 import { INITIAL_UPDATE_STATUS, type AppUpdateStatus } from './updateTypes'
-import type { GitOverview, GitStatus, SessionRuntime, Settings, TerminalType } from './types'
+import type {
+  AiLimitsOverview,
+  GitOverview,
+  GitStatus,
+  SessionRuntime,
+  Settings,
+  TerminalType
+} from './types'
 
 const EMPTY_GIT: GitStatus = { isRepo: false, branch: '', files: {} }
 const EMPTY_GIT_OVERVIEW: GitOverview = {
@@ -33,6 +40,33 @@ const EMPTY_GIT_OVERVIEW: GitOverview = {
   remoteActivity: [],
   lastUpdated: 0
 }
+const EMPTY_AI_LIMITS: AiLimitsOverview = {
+  tools: [
+    {
+      tool: 'codex',
+      label: 'Codex',
+      status: 'loading',
+      detail: 'Codex limitleri okunuyor',
+      windows: [],
+      updatedAt: null
+    },
+    {
+      tool: 'claude',
+      label: 'Claude',
+      status: 'loading',
+      detail: 'Claude limitleri okunuyor',
+      windows: [],
+      updatedAt: null
+    }
+  ],
+  lastUpdated: 0
+}
+
+const AI_TOOL_UPDATES = [
+  { label: 'Codex', command: 'codex update' },
+  { label: 'Claude', command: 'claude update' },
+  { label: 'OpenCode', command: 'opencode upgrade' }
+] as const
 
 function commandFor(type: TerminalType, settings: Settings): string {
   switch (type) {
@@ -51,6 +85,53 @@ function commandFor(type: TerminalType, settings: Settings): string {
 
 const errMsg = (err: unknown) => (err instanceof Error ? err.message : String(err))
 
+function buildAiToolsUpdateScript(): string {
+  const lines = [
+    '$ErrorActionPreference = "Continue"',
+    'Write-Host ""',
+    'Write-Host "Buyruk AI araclari guncelleme" -ForegroundColor Cyan'
+  ]
+
+  for (const item of AI_TOOL_UPDATES) {
+    lines.push(
+      'Write-Host ""',
+      `Write-Host "== ${item.label} ==" -ForegroundColor Yellow`,
+      item.command
+    )
+  }
+
+  lines.push(
+    'Write-Host ""',
+    'Write-Host "Tamamlandi. Ciktilari kontrol edebilirsin." -ForegroundColor Green'
+  )
+
+  return `${lines.join('\r')}\r`
+}
+
+function normalizePromptText(text: string): string {
+  return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+}
+
+function buildSubmittedTerminalPayload(session: SessionRuntime, data: string): string[] {
+  if (!data.endsWith('\r') || data.length <= 1) return [data]
+  const prompt = data.slice(0, -1)
+  if (!prompt) return ['\r']
+
+  if (session.type === 'claude' || session.type === 'codex' || session.type === 'opencode') {
+    const pasted = `\x1b[200~${normalizePromptText(prompt)}\x1b[201~`
+    return session.type === 'codex' ? [pasted, '\r', '\r'] : [pasted, '\r']
+  }
+
+  return [data]
+}
+
+function writeSubmittedTerminalData(session: SessionRuntime, data: string): void {
+  const payloads = buildSubmittedTerminalPayload(session, data)
+  payloads.forEach((payload, index) => {
+    window.setTimeout(() => window.api.writeTerminal(session.id, payload), index * 35)
+  })
+}
+
 interface UiState {
   settingsOpen: boolean
   explorerNonce: number
@@ -59,6 +140,7 @@ interface UiState {
   broadcast: boolean
   gitStatus: GitStatus
   gitOverview: GitOverview
+  aiLimits: AiLimitsOverview
   gitPanelOpen: boolean
   quickOpenOpen: boolean
   paletteOpen: boolean
@@ -74,6 +156,7 @@ type UiAction =
   | { type: 'toggle-broadcast' }
   | { type: 'set-git-status'; gitStatus: GitStatus }
   | { type: 'set-git-overview'; gitOverview: GitOverview }
+  | { type: 'set-ai-limits'; aiLimits: AiLimitsOverview }
   | { type: 'toggle-git-panel' }
   | { type: 'set-quick-open'; open: boolean }
   | { type: 'set-palette-open'; open: boolean }
@@ -89,6 +172,7 @@ function createInitialUiState(): UiState {
     broadcast: false,
     gitStatus: EMPTY_GIT,
     gitOverview: EMPTY_GIT_OVERVIEW,
+    aiLimits: EMPTY_AI_LIMITS,
     gitPanelOpen: false,
     quickOpenOpen: false,
     paletteOpen: false,
@@ -113,6 +197,8 @@ function uiReducer(state: UiState, action: UiAction): UiState {
       return { ...state, gitStatus: action.gitStatus }
     case 'set-git-overview':
       return { ...state, gitOverview: action.gitOverview }
+    case 'set-ai-limits':
+      return { ...state, aiLimits: action.aiLimits }
     case 'toggle-git-panel':
       return { ...state, gitPanelOpen: !state.gitPanelOpen }
     case 'set-quick-open':
@@ -147,6 +233,7 @@ interface UseCommandListOptions {
   onNewFolder: () => void
   onBroadcastPrompt: () => void
   onOpenOrchestrator: () => void
+  onUpdateAiTools: () => void
   onSaveFile: () => void
   onCloseActive: () => void
   onRestart: (session: SessionRuntime) => void
@@ -163,6 +250,7 @@ function useCommandList({
   onNewFolder,
   onBroadcastPrompt,
   onOpenOrchestrator,
+  onUpdateAiTools,
   onSaveFile,
   onCloseActive,
   onRestart,
@@ -179,6 +267,7 @@ function useCommandList({
       { id: 'open-folder', label: 'Klasör Aç (workspace değiştir)', icon: 'folder', run: onOpenFolder },
       { id: 'new-folder', label: 'Yeni Klasör', icon: 'folder-plus', run: onNewFolder },
       { id: 'orchestrator', label: 'AI Orkestrasyon', icon: 'orchestrator', run: onOpenOrchestrator },
+      { id: 'update-ai-tools', label: 'AI Araçlarını Güncelle', icon: 'refresh', run: onUpdateAiTools },
       { id: 'quick-open', label: 'Hızlı Dosya Aç', hint: 'Ctrl+P', icon: 'search', run: () => activeSession && dispatchUi({ type: 'set-quick-open', open: true }) },
       { id: 'save', label: 'Dosyayı Kaydet', hint: 'Ctrl+S', icon: 'save', run: onSaveFile },
       { id: 'close-term', label: 'Aktif Terminali Kapat', icon: 'close', run: onCloseActive },
@@ -205,6 +294,7 @@ function useCommandList({
     onNewFolder,
     onBroadcastPrompt,
     onOpenOrchestrator,
+    onUpdateAiTools,
     onSaveFile,
     onCloseActive,
     onRestart,
@@ -279,13 +369,12 @@ function useTerminalController({
   const handleInput = useCallback((id: string, data: string) => {
     if (broadcastRef.current) {
       for (const session of sessionsRef.current) {
-        window.api.writeTerminal(session.id, data)
-        if (session.type === 'codex' && data.endsWith('\r')) {
-          window.api.writeTerminal(session.id, '\r')
-        }
+        writeSubmittedTerminalData(session, data)
       }
     } else {
-      window.api.writeTerminal(id, data)
+      const session = sessionsRef.current.find((item) => item.id === id)
+      if (session) writeSubmittedTerminalData(session, data)
+      else window.api.writeTerminal(id, data)
     }
   }, [sessionsRef])
 
@@ -305,8 +394,7 @@ function useTerminalController({
     if (!message) return
 
     for (const session of targets) {
-      window.api.writeTerminal(session.id, `${message}\r`)
-      if (session.type === 'codex') window.api.writeTerminal(session.id, '\r')
+      writeSubmittedTerminalData(session, `${message}\r`)
     }
     dispatchUi({ type: 'set-status-message', message: `${targets.length} terminale gönderildi` })
   }, [dialog, dispatchUi, sessionsRef])
@@ -378,6 +466,27 @@ function useTerminalController({
     [actions, settings, dialog, dispatchUi]
   )
 
+  const handleUpdateAiTools = useCallback(async () => {
+    const cwd = activeSessionRef.current?.cwd ?? sessionsRef.current[0]?.cwd ?? 'C:\\'
+    try {
+      const session = await window.api.createTerminal({
+        type: 'powershell',
+        cwd,
+        command: settings.powershellCommand,
+        cols: 96,
+        rows: 28
+      })
+      actions.add(session)
+      actions.rename(session.id, 'AI Araçları Güncelle')
+      window.setTimeout(() => {
+        window.api.writeTerminal(session.id, buildAiToolsUpdateScript())
+      }, 250)
+      dispatchUi({ type: 'set-status-message', message: 'AI araçları güncelleme başladı' })
+    } catch (err) {
+      dialog.notify(`AI araçları güncellenemedi: ${errMsg(err)}`, 'error')
+    }
+  }, [actions, activeSessionRef, dialog, dispatchUi, sessionsRef, settings.powershellCommand])
+
   const handleOpenTerminalHere = useCallback(
     (cwd: string, type: TerminalType) => spawnTerminal(type, cwd),
     [spawnTerminal]
@@ -441,6 +550,7 @@ function useTerminalController({
     handleNewTerminal,
     handleOpenRecent,
     handleRestart,
+    handleUpdateAiTools,
     handleOpenTerminalHere,
     handleRenameSession,
     handleBell,
@@ -730,6 +840,7 @@ function useAppModel() {
     broadcast,
     gitStatus,
     gitOverview,
+    aiLimits,
     gitPanelOpen,
     quickOpenOpen,
     paletteOpen,
@@ -773,6 +884,7 @@ function useAppModel() {
     handleNewTerminal,
     handleOpenRecent,
     handleRestart,
+    handleUpdateAiTools,
     handleOpenTerminalHere,
     handleRenameSession,
     handleBell,
@@ -828,6 +940,31 @@ function useAppModel() {
       dispatchUi({ type: 'set-update-status', status })
     )
   }, [])
+
+  const handleRefreshAiLimits = useCallback(() => {
+    window.api
+      .getAiLimits({ codexCommand: settings.codexCommand })
+      .then((overview) => dispatchUi({ type: 'set-ai-limits', aiLimits: overview }))
+      .catch((err: unknown) =>
+        dispatchUi({
+          type: 'set-ai-limits',
+          aiLimits: {
+            tools: EMPTY_AI_LIMITS.tools.map((tool) => ({
+              ...tool,
+              status: 'error',
+              detail: errMsg(err)
+            })),
+            lastUpdated: Date.now()
+          }
+        })
+      )
+  }, [settings.codexCommand])
+
+  useEffect(() => {
+    handleRefreshAiLimits()
+    const timer = window.setInterval(handleRefreshAiLimits, 120000)
+    return () => window.clearInterval(timer)
+  }, [handleRefreshAiLimits])
 
   const handleCheckForUpdates = useCallback(() => {
     window.api.updates
@@ -953,6 +1090,7 @@ function useAppModel() {
     onNewFolder: handleNewFolder,
     onBroadcastPrompt: handleBroadcastPrompt,
     onOpenOrchestrator: openOrchestrator,
+    onUpdateAiTools: handleUpdateAiTools,
     onSaveFile: saveActiveFile,
     onCloseActive: handleCloseActive,
     onRestart: handleRestart,
@@ -970,6 +1108,7 @@ function useAppModel() {
     closeSettings,
     commands,
     explorerNonce,
+    aiLimits,
     gitStatus,
     gitOverview,
     gitPanelOpen,
@@ -981,6 +1120,7 @@ function useAppModel() {
     handleCloseFile,
     handleCloseSession,
     handleInstallUpdate,
+    handleUpdateAiTools,
     handleFetchGit,
     handleInput,
     handleNewFolder,
@@ -992,6 +1132,7 @@ function useAppModel() {
     handleOpenTerminalHere,
     handleRenameSession,
     handleResetOrchestrator,
+    handleRefreshAiLimits,
     handleRefreshGit,
     handleRestart,
     handleSaveOrchestrator,

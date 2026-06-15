@@ -8,7 +8,7 @@ interface GitPanelProps {
   onFetch: () => void
   onOpenDiff: (path: string) => void
   onClose?: () => void
-  floating?: boolean
+  popover?: boolean
 }
 
 function changeKind(change: GitChange): { label: string; cls: string } {
@@ -40,9 +40,9 @@ export function GitPanel({
   onFetch,
   onOpenDiff,
   onClose,
-  floating = false
+  popover = false
 }: GitPanelProps) {
-  const panelClass = `git-panel ${floating ? 'is-floating' : ''}`
+  const panelClass = `git-panel ${popover ? 'is-popover' : ''}`
 
   if (!overview.isRepo) {
     return (

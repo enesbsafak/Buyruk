@@ -56,6 +56,7 @@ export function useXtermSession({
   const fitRef = useRef<FitAddon | null>(null)
   const searchRef = useRef<SearchAddon | null>(null)
   const lastScrollKeyRef = useRef('')
+  const lastScrollStateRef = useRef(INITIAL_TERMINAL_SCROLL)
   const latestRef = useRef({
     fontFamily,
     fontSize,
@@ -77,17 +78,20 @@ export function useXtermSession({
   const notifyScrollState = useCallback((term: Terminal, viewportY?: number) => {
     const next = getScrollState(term, viewportY)
     const key = `${next.viewportY}:${next.baseY}:${next.rows}`
+    lastScrollStateRef.current = next
     if (lastScrollKeyRef.current === key) return
     lastScrollKeyRef.current = key
     latestRef.current.onScrollStateChange(next)
   }, [])
 
-  const fitAndResize = useCallback(() => {
+  const fitAndResize = useCallback((followBottom = false) => {
     const term = termRef.current
     if (!term) return
     try {
+      const shouldFollowBottom = followBottom || lastScrollStateRef.current.atBottom
       fitRef.current?.fit()
       window.api.resizeTerminal(session.id, term.cols, term.rows)
+      if (shouldFollowBottom) term.scrollToBottom()
       notifyScrollState(term)
     } catch {
       // ignore transient resize errors
@@ -138,6 +142,7 @@ export function useXtermSession({
     fitRef.current = fit
     searchRef.current = search
     lastScrollKeyRef.current = ''
+    lastScrollStateRef.current = INITIAL_TERMINAL_SCROLL
 
     try {
       fit.fit()
@@ -171,6 +176,19 @@ export function useXtermSession({
         hasPrimaryModifier &&
         !e.altKey &&
         !e.shiftKey &&
+        key === 'c' &&
+        term.hasSelection()
+      ) {
+        window.api.copyText(term.getSelection())
+        term.clearSelection()
+        return false
+      }
+
+      if (
+        e.type === 'keydown' &&
+        hasPrimaryModifier &&
+        !e.altKey &&
+        !e.shiftKey &&
         key === 'v'
       ) {
         const text = window.api.clipboardReadText()
@@ -192,6 +210,8 @@ export function useXtermSession({
       try {
         fit.fit()
         window.api.resizeTerminal(session.id, term.cols, term.rows)
+        const shouldFollowBottom = lastScrollStateRef.current.atBottom
+        if (shouldFollowBottom) term.scrollToBottom()
         notifyScrollState(term)
       } catch {
         // ignore transient resize errors
@@ -219,7 +239,7 @@ export function useXtermSession({
   }, [fitAndResize, fontFamily, fontSize])
 
   useEffect(() => {
-    requestAnimationFrame(fitAndResize)
+    requestAnimationFrame(() => fitAndResize(true))
   }, [fitAndResize, zoomed])
 
   const focusTerminal = useCallback(() => {

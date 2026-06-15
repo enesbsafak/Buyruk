@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { Toolbar } from './Toolbar'
 import { StatusBar } from './StatusBar'
 import { WorkspacePanels } from './WorkspacePanels'
@@ -7,7 +8,14 @@ import type { Command } from './CommandPalette'
 import type { OrchestratorConfig } from '../orchestrator'
 import type { RecentFolder } from '../utils/persistence'
 import type { AppUpdateStatus } from '../updateTypes'
-import type { GitOverview, GitStatus, SessionRuntime, Settings, TerminalType } from '../types'
+import type {
+  AiLimitsOverview,
+  GitOverview,
+  GitStatus,
+  SessionRuntime,
+  Settings,
+  TerminalType
+} from '../types'
 
 interface AppViewProps {
   activeId: string | null
@@ -19,6 +27,7 @@ interface AppViewProps {
   closeSettings: () => void
   commands: Command[]
   explorerNonce: number
+  aiLimits: AiLimitsOverview
   gitOverview: GitOverview
   gitPanelOpen: boolean
   gitStatus: GitStatus
@@ -30,6 +39,7 @@ interface AppViewProps {
   handleCloseFile: (path: string) => void
   handleCloseSession: (id: string) => void
   handleInstallUpdate: () => void
+  handleUpdateAiTools: () => void
   handleFetchGit: () => void
   handleInput: (id: string, data: string) => void
   handleNewFolder: () => void
@@ -41,6 +51,7 @@ interface AppViewProps {
   handleOpenTerminalHere: (cwd: string, type: TerminalType) => void
   handleRenameSession: (session: SessionRuntime) => void
   handleResetOrchestrator: () => void
+  handleRefreshAiLimits: () => void
   handleRefreshGit: () => void
   handleRestart: (session: SessionRuntime) => void
   handleSaveOrchestrator: (config: OrchestratorConfig) => void
@@ -75,6 +86,7 @@ export function AppView({
   closeSettings,
   commands,
   explorerNonce,
+  aiLimits,
   gitOverview,
   gitPanelOpen,
   gitStatus,
@@ -86,6 +98,7 @@ export function AppView({
   handleCloseFile,
   handleCloseSession,
   handleInstallUpdate,
+  handleUpdateAiTools,
   handleFetchGit,
   handleInput,
   handleNewFolder,
@@ -97,6 +110,7 @@ export function AppView({
   handleOpenTerminalHere,
   handleRenameSession,
   handleResetOrchestrator,
+  handleRefreshAiLimits,
   handleRefreshGit,
   handleRestart,
   handleSaveOrchestrator,
@@ -120,6 +134,23 @@ export function AppView({
   setActiveSession,
   bumpExplorer
 }: AppViewProps) {
+  const gitPopover = useMemo(
+    () => (
+      <GitPanel
+        overview={gitOverview}
+        popover
+        onRefresh={handleRefreshGit}
+        onFetch={handleFetchGit}
+        onOpenDiff={(path) => {
+          handleOpenGitDiff(path)
+          toggleGitPanel()
+        }}
+        onClose={toggleGitPanel}
+      />
+    ),
+    [gitOverview, handleFetchGit, handleOpenGitDiff, handleRefreshGit, toggleGitPanel]
+  )
+
   return (
     <div className="app">
       <Toolbar
@@ -134,9 +165,13 @@ export function AppView({
         onOpenRecent={handleOpenRecent}
         broadcast={broadcast}
         onBroadcastPrompt={handleBroadcastPrompt}
+        onUpdateAiTools={handleUpdateAiTools}
+        aiLimits={aiLimits}
+        onRefreshAiLimits={handleRefreshAiLimits}
         gitChangeCount={gitOverview.changes.length}
         gitPanelOpen={gitPanelOpen}
         onToggleGitPanel={toggleGitPanel}
+        gitPopover={gitPopover}
         orchestratorEnabled={orchestratorConfig.enabled}
       />
 
@@ -163,28 +198,6 @@ export function AppView({
         onCloseFile={handleCloseFile}
         onOpenGitDiff={handleOpenGitDiff}
       />
-
-      {gitPanelOpen && (
-        <div
-          className="git-drawer-layer"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) toggleGitPanel()
-          }}
-        >
-          <GitPanel
-            overview={gitOverview}
-            floating
-            onRefresh={handleRefreshGit}
-            onFetch={handleFetchGit}
-            onOpenDiff={(path) => {
-              handleOpenGitDiff(path)
-              toggleGitPanel()
-            }}
-            onClose={toggleGitPanel}
-          />
-        </div>
-      )}
 
       <StatusBar
         activeSession={activeSession}
