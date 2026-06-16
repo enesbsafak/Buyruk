@@ -1,10 +1,10 @@
-import { type BrowserWindow, type IpcMain } from 'electron'
+import { type BrowserWindow, type IpcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import type * as PtyType from 'node-pty'
 import { IPC } from './ipcChannels'
-import { withClaudeLimitBridge } from './aiLimits'
 import { accountLabel, accountMatchesType, isCliKind, resolveTerminalEnv, touchAccount } from './accounts'
+import { assertTrustedIpcSender, assertWorkspaceRoot } from './security'
 
 // Load node-pty lazily so the app still launches (and shows its UI) even when the
 // native binary hasn't been compiled yet. Errors only surface when a terminal is
@@ -56,6 +56,21 @@ const TYPE_LABEL: Record<TerminalType, string> = {
   codex: 'Codex',
   opencode: 'OpenCode'
 }
+const TERMINAL_TYPES = new Set<TerminalType>(['cmd', 'powershell', 'claude', 'codex', 'opencode'])
+const DEFAULT_COMMAND: Record<TerminalType, string> = {
+  cmd: 'cmd.exe',
+  powershell: 'powershell.exe',
+  claude: 'claude',
+  codex: 'codex',
+  opencode: 'opencode'
+}
+const MAX_COMMAND_LENGTH = 2048
+const MAX_TERMINAL_DIMENSION = 500
+
+function clampDimension(value: number | undefined, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback
+  return Math.max(1, Math.min(MAX_TERMINAL_DIMENSION, Math.floor(value!)))
+}
 
 export class TerminalManager {
   private terminals = new Map<string, PtyType.IPty>()
@@ -84,19 +99,61 @@ export class TerminalManager {
   }
 
   registerHandlers(ipcMain: IpcMain): void {
-    ipcMain.handle(IPC.CREATE_TERMINAL, (_e, options: CreateTerminalOptions) =>
+    const handle = (
+      channel: string,
+      listener: (event: IpcMainInvokeEvent, ...args: any[]) => unknown
+    ): void => {
+      ipcMain.handle(channel, async (event, ...args) => {
+        assertTrustedIpcSender(event)
+        return listener(event, ...args)
+      })
+    }
+    const on = (
+      channel: string,
+      listener: (event: IpcMainEvent, ...args: any[]) => void
+    ): void => {
+      ipcMain.on(channel, (event, ...args) => {
+        try {
+          assertTrustedIpcSender(event)
+        } catch {
+          return
+        }
+        listener(event, ...args)
+      })
+    }
+
+    handle(IPC.CREATE_TERMINAL, (_e, options: CreateTerminalOptions) =>
       this.create(options)
     )
-    ipcMain.handle(
+    handle(
       IPC.RESTART_TERMINAL,
       (_e, payload: CreateTerminalOptions & { id: string }) =>
         this.restart(payload.id, payload)
     )
-    ipcMain.on(IPC.WRITE_TERMINAL, (_e, id: string, data: string) => this.write(id, data))
-    ipcMain.on(IPC.RESIZE_TERMINAL, (_e, id: string, cols: number, rows: number) =>
+    on(IPC.WRITE_TERMINAL, (_e, id: string, data: string) => this.write(id, data))
+    on(IPC.RESIZE_TERMINAL, (_e, id: string, cols: number, rows: number) =>
       this.resize(id, cols, rows)
     )
-    ipcMain.handle(IPC.KILL_TERMINAL, (_e, id: string) => this.kill(id))
+    handle(IPC.KILL_TERMINAL, (_e, id: string) => this.kill(id))
+  }
+
+  private normalizeOptions(options: CreateTerminalOptions): CreateTerminalOptions {
+    if (!options || !TERMINAL_TYPES.has(options.type)) {
+      throw new Error('Geçersiz terminal türü')
+    }
+    const fallbackCommand = DEFAULT_COMMAND[options.type]
+    const command = typeof options.command === 'string' ? options.command.trim() : fallbackCommand
+    if (command.length > MAX_COMMAND_LENGTH || /[\r\n\0]/.test(command)) {
+      throw new Error('Geçersiz terminal komutu')
+    }
+    return {
+      ...options,
+      cwd: assertWorkspaceRoot(options.cwd),
+      command: command || fallbackCommand,
+      cols: clampDimension(options.cols, 80),
+      rows: clampDimension(options.rows, 24),
+      accountId: typeof options.accountId === 'string' ? options.accountId : undefined
+    }
   }
 
   // Decide which executable + args to spawn for each session type.
@@ -111,7 +168,7 @@ export class TerminalManager {
       case 'powershell':
         return { file: options.command || 'powershell.exe', args: [] }
       case 'claude':
-        return { file: comspec, args: ['/k', withClaudeLimitBridge(options.command || 'claude')] }
+        return { file: comspec, args: ['/k', options.command || 'claude'] }
       case 'codex':
       case 'opencode':
         return { file: comspec, args: ['/k', options.command] }
@@ -163,21 +220,23 @@ export class TerminalManager {
   }
 
   private async create(options: CreateTerminalOptions): Promise<TerminalSession> {
+    const safeOptions = this.normalizeOptions(options)
     const id = randomUUID()
-    await this.spawnPty(id, options)
+    await this.spawnPty(id, safeOptions)
     return {
       id,
-      type: options.type,
-      title: this.buildTitle(options),
-      cwd: options.cwd,
+      type: safeOptions.type,
+      title: this.buildTitle(safeOptions),
+      cwd: safeOptions.cwd,
       createdAt: Date.now(),
       isActive: true,
-      accountId: options.accountId
+      accountId: safeOptions.accountId
     }
   }
 
   // Re-spawn a pty under the same id (used to revive an exited terminal in place).
   private async restart(id: string, options: CreateTerminalOptions): Promise<void> {
+    const safeOptions = this.normalizeOptions(options)
     const existing = this.terminals.get(id)
     if (existing) {
       try {
@@ -187,7 +246,7 @@ export class TerminalManager {
       }
       this.terminals.delete(id)
     }
-    await this.spawnPty(id, options)
+    await this.spawnPty(id, safeOptions)
   }
 
   private write(id: string, data: string): void {
@@ -260,7 +319,7 @@ export class TerminalManager {
     const term = this.terminals.get(id)
     if (!term) return
     try {
-      term.resize(Math.max(1, cols), Math.max(1, rows))
+      term.resize(clampDimension(cols, 80), clampDimension(rows, 24))
     } catch {
       // Resizing a process that just exited can throw; ignore.
     }

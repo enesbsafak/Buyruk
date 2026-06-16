@@ -16,6 +16,48 @@ export interface AccountsState {
   activeByType: Partial<Record<CliKind, string>>
 }
 
+export type AiLimitTool = 'codex' | 'claude'
+export type AiLimitStatus = 'ready' | 'unavailable' | 'error'
+export type AiLimitSource = 'linked' | 'global' | 'none'
+
+export interface AiLimitWindow {
+  id: string
+  label: string
+  usedPercent: number
+  remainingPercent: number
+  periodDurationMs: number | null
+  resetsAt: number | null
+}
+
+export interface AiLimitMetric {
+  label: string
+  value: string
+}
+
+export interface AiToolLimit {
+  tool: AiLimitTool
+  label: string
+  status: AiLimitStatus
+  detail: string
+  windows: AiLimitWindow[]
+  metrics: AiLimitMetric[]
+  updatedAt: number | null
+  planType?: string | null
+  accountLabel?: string | null
+  source: AiLimitSource
+}
+
+export interface AiLimitsOverview {
+  tools: AiToolLimit[]
+  lastUpdated: number
+}
+
+export interface AiLimitsRequest {
+  codexAccountId?: string
+  claudeAccountId?: string
+  force?: boolean
+}
+
 export function isCliKind(type: TerminalType): type is CliKind {
   return type === 'claude' || type === 'codex' || type === 'opencode'
 }
@@ -128,34 +170,6 @@ export interface GitOverview {
   changes: GitChange[]
   recentCommits: GitCommit[]
   remoteActivity: GitRemoteActivity[]
-  lastUpdated: number
-}
-
-export type AiLimitTool = 'codex' | 'claude'
-
-export type AiLimitStatus = 'loading' | 'ready' | 'unavailable' | 'error'
-
-export interface AiLimitWindow {
-  id: string
-  label: string
-  usedPercent: number
-  remainingPercent: number
-  windowDurationMins: number | null
-  resetsAt: number | null
-}
-
-export interface AiToolLimit {
-  tool: AiLimitTool
-  label: string
-  status: AiLimitStatus
-  detail: string
-  windows: AiLimitWindow[]
-  updatedAt: number | null
-  planType?: string | null
-}
-
-export interface AiLimitsOverview {
-  tools: AiToolLimit[]
   lastUpdated: number
 }
 

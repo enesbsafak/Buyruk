@@ -7,13 +7,15 @@ import { TerminalManager } from './terminalManager'
 import { IPC } from './ipcChannels'
 import { loadWindowState, trackWindowState } from './windowState'
 import { registerUpdaterHandlers, startAutoUpdateCheck } from './updater'
-import { ensureClaudeLimitBridge, registerAiLimitHandlers } from './aiLimits'
 import { registerAccountHandlers } from './accounts'
+import { registerAiLimitHandlers } from './aiLimits'
+import { assertTrustedIpcSender, isSafeDevServerUrl, isTrustedAppUrl } from './security'
 
 let mainWindow: BrowserWindow | null = null
 let allowClose = false
 const terminalManager = new TerminalManager()
 
+app.enableSandbox()
 log.initialize()
 log.transports.file.level = 'info'
 
@@ -36,7 +38,8 @@ function createWindow(): void {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: true,
+      webSecurity: true
     }
   })
 
@@ -52,8 +55,14 @@ function createWindow(): void {
     mainWindow?.webContents.send(IPC.WINDOW_MAXIMIZED, false)
   )
 
-  if (process.env.VITE_DEV_SERVER_URL) {
-    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  mainWindow.webContents.on('will-navigate', (event, navigationUrl) => {
+    if (!isTrustedAppUrl(navigationUrl)) event.preventDefault()
+  })
+
+  const devServerUrl = process.env.VITE_DEV_SERVER_URL
+  if (!app.isPackaged && isSafeDevServerUrl(devServerUrl)) {
+    mainWindow.loadURL(devServerUrl)
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
   }
@@ -81,17 +90,39 @@ function createWindow(): void {
 }
 
 function registerWindowControls(): void {
-  ipcMain.on(IPC.WINDOW_MINIMIZE, (e) =>
+  ipcMain.on(IPC.WINDOW_MINIMIZE, (e) => {
+    try {
+      assertTrustedIpcSender(e)
+    } catch {
+      return
+    }
     BrowserWindow.fromWebContents(e.sender)?.minimize()
-  )
+  })
   ipcMain.on(IPC.WINDOW_MAXIMIZE_TOGGLE, (e) => {
+    try {
+      assertTrustedIpcSender(e)
+    } catch {
+      return
+    }
     const win = BrowserWindow.fromWebContents(e.sender)
     if (!win) return
     if (win.isMaximized()) win.unmaximize()
     else win.maximize()
   })
-  ipcMain.on(IPC.WINDOW_CLOSE, (e) => BrowserWindow.fromWebContents(e.sender)?.close())
-  ipcMain.on(IPC.APP_DO_CLOSE, () => {
+  ipcMain.on(IPC.WINDOW_CLOSE, (e) => {
+    try {
+      assertTrustedIpcSender(e)
+    } catch {
+      return
+    }
+    BrowserWindow.fromWebContents(e.sender)?.close()
+  })
+  ipcMain.on(IPC.APP_DO_CLOSE, (e) => {
+    try {
+      assertTrustedIpcSender(e)
+    } catch {
+      return
+    }
     allowClose = true
     mainWindow?.close()
   })
@@ -99,15 +130,10 @@ function registerWindowControls(): void {
 
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null) // remove the default top-left application menu
-  try {
-    ensureClaudeLimitBridge()
-  } catch (err) {
-    log.warn('Claude limit bridge could not be prepared', err)
-  }
   registerFileSystemHandlers(ipcMain, () => mainWindow)
   terminalManager.registerHandlers(ipcMain)
-  registerAiLimitHandlers(ipcMain)
   registerAccountHandlers(ipcMain)
+  registerAiLimitHandlers(ipcMain)
   registerWindowControls()
   registerUpdaterHandlers(ipcMain, () => mainWindow)
   createWindow()

@@ -2,6 +2,7 @@ import type {
   CreateTerminalOptions,
   AccountsState,
   AiLimitsOverview,
+  AiLimitsRequest,
   CliKind,
   FileNode,
   GitBranches,
@@ -44,8 +45,6 @@ declare global {
       gitBranches(root: string): Promise<GitBranches>
       gitCheckout(root: string, name: string): Promise<GitOverview>
       gitCreateBranch(root: string, name: string): Promise<GitOverview>
-      getAiLimits(options: { codexCommand?: string }): Promise<AiLimitsOverview>
-
       // CLI accounts (multi-account linking)
       accounts: {
         list(): Promise<AccountsState>
@@ -53,6 +52,11 @@ declare global {
         remove(id: string): Promise<AccountsState>
         rename(id: string, label: string): Promise<AccountsState>
         setActive(type: CliKind, id: string): Promise<AccountsState>
+      }
+
+      // AI usage limits
+      aiLimits: {
+        get(request?: AiLimitsRequest): Promise<AiLimitsOverview>
       }
       gitClone(options: {
         url: string

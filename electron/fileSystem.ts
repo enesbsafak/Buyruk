@@ -4,6 +4,7 @@ import {
   clipboard,
   type BrowserWindow,
   type IpcMain,
+  type IpcMainInvokeEvent,
   type OpenDialogOptions
 } from 'electron'
 import fs from 'node:fs/promises'
@@ -18,6 +19,15 @@ import {
   parseGitStatusFiles,
   relativeGitPath
 } from '../src/utils/gitSafety'
+import {
+  assertAllowedPath,
+  assertNotWorkspaceRoot,
+  assertSafeImagePreview,
+  assertSameAllowedRoot,
+  assertTrustedIpcSender,
+  assertWorkspaceRoot,
+  rememberWorkspaceRoot
+} from './security'
 
 function execGit(args: string[], cwd: string): Promise<string> {
   return new Promise((resolve) => {
@@ -85,6 +95,7 @@ function deriveRepoName(url: string): string {
 }
 
 const MAX_TEXT_SIZE = 5 * 1024 * 1024 // 5 MB
+const MAX_IMAGE_PREVIEW_SIZE = 15 * 1024 * 1024 // 15 MB
 const BINARY_SNIFF_BYTES = 8000
 const GIT_RENAME_PARTS = /^(.*) -> (.*)$/
 const FIELD_SEP = '\x1f'
@@ -391,7 +402,17 @@ export function registerFileSystemHandlers(
   ipcMain: IpcMain,
   getWindow: () => BrowserWindow | null
 ): void {
-  ipcMain.handle(IPC.SELECT_FOLDER, async (_e, defaultPath?: string) => {
+  const handle = (
+    channel: string,
+    listener: (event: IpcMainInvokeEvent, ...args: any[]) => unknown
+  ): void => {
+    ipcMain.handle(channel, async (event, ...args) => {
+      assertTrustedIpcSender(event)
+      return listener(event, ...args)
+    })
+  }
+
+  handle(IPC.SELECT_FOLDER, async (_e, defaultPath?: string) => {
     const win = getWindow()
     const opts: OpenDialogOptions = {
       title: 'Klasör seç',
@@ -402,11 +423,11 @@ export function registerFileSystemHandlers(
       ? await dialog.showOpenDialog(win, opts)
       : await dialog.showOpenDialog(opts)
     if (result.canceled || result.filePaths.length === 0) return null
-    return result.filePaths[0]
+    return rememberWorkspaceRoot(result.filePaths[0])
   })
 
   // Pick a parent directory; the renderer then asks for a name and calls createFolder.
-  ipcMain.handle(IPC.CREATE_FOLDER_DIALOG, async (_e, defaultPath?: string) => {
+  handle(IPC.CREATE_FOLDER_DIALOG, async (_e, defaultPath?: string) => {
     const win = getWindow()
     const opts: OpenDialogOptions = {
       title: 'Yeni klasör için konum seç',
@@ -417,15 +438,16 @@ export function registerFileSystemHandlers(
       ? await dialog.showOpenDialog(win, opts)
       : await dialog.showOpenDialog(opts)
     if (result.canceled || result.filePaths.length === 0) return null
-    return result.filePaths[0]
+    return rememberWorkspaceRoot(result.filePaths[0])
   })
 
-  ipcMain.handle(IPC.READ_DIR, async (_e, dirPath: string): Promise<FileNode[]> => {
-    const entries = await fs.readdir(dirPath, { withFileTypes: true })
+  handle(IPC.READ_DIR, async (_e, dirPath: string): Promise<FileNode[]> => {
+    const safeDir = assertAllowedPath(dirPath, 'Klasör')
+    const entries = await fs.readdir(safeDir, { withFileTypes: true })
     return entries
       .map((entry) => ({
         name: entry.name,
-        path: path.join(dirPath, entry.name),
+        path: path.join(safeDir, entry.name),
         isDirectory: entry.isDirectory()
       }))
       .sort((a, b) => {
@@ -434,10 +456,11 @@ export function registerFileSystemHandlers(
       })
   })
 
-  ipcMain.handle(
+  handle(
     IPC.READ_FILE,
     async (_e, filePath: string): Promise<{ content: string; isBinary: boolean }> => {
-      const buffer = await fs.readFile(filePath)
+      const safePath = assertAllowedPath(filePath, 'Dosya')
+      const buffer = await fs.readFile(safePath)
       if (buffer.length > MAX_TEXT_SIZE || looksBinary(buffer)) {
         return { content: '', isBinary: true }
       }
@@ -445,7 +468,7 @@ export function registerFileSystemHandlers(
     }
   )
 
-  ipcMain.handle(IPC.READ_FILE_BASE64, async (_e, filePath: string): Promise<string> => {
+  handle(IPC.READ_FILE_BASE64, async (_e, filePath: string): Promise<string> => {
     const mimeByExt: Record<string, string> = {
       '.png': 'image/png',
       '.jpg': 'image/jpeg',
@@ -457,36 +480,47 @@ export function registerFileSystemHandlers(
       '.bmp': 'image/bmp',
       '.avif': 'image/avif'
     }
-    const mime = mimeByExt[path.extname(filePath).toLowerCase()] ?? 'application/octet-stream'
-    const buffer = await fs.readFile(filePath)
+    const safePath = assertAllowedPath(filePath, 'Dosya')
+    assertSafeImagePreview(safePath, MAX_IMAGE_PREVIEW_SIZE)
+    const mime = mimeByExt[path.extname(safePath).toLowerCase()] ?? 'application/octet-stream'
+    const buffer = await fs.readFile(safePath)
     return `data:${mime};base64,${buffer.toString('base64')}`
   })
 
-  ipcMain.handle(IPC.WRITE_FILE, async (_e, filePath: string, content: string) => {
-    await fs.writeFile(filePath, content, 'utf8')
+  handle(IPC.WRITE_FILE, async (_e, filePath: string, content: string) => {
+    const safePath = assertAllowedPath(filePath, 'Dosya')
+    await fs.writeFile(safePath, content, 'utf8')
   })
 
-  ipcMain.handle(IPC.CREATE_FILE, async (_e, filePath: string) => {
+  handle(IPC.CREATE_FILE, async (_e, filePath: string) => {
     // 'wx' fails if the file already exists, so we never clobber existing data.
-    await fs.writeFile(filePath, '', { flag: 'wx' })
+    const safePath = assertAllowedPath(filePath, 'Dosya')
+    await fs.writeFile(safePath, '', { flag: 'wx' })
   })
 
-  ipcMain.handle(IPC.CREATE_FOLDER, async (_e, dirPath: string) => {
-    await fs.mkdir(dirPath, { recursive: true })
+  handle(IPC.CREATE_FOLDER, async (_e, dirPath: string) => {
+    const safeDir = assertAllowedPath(dirPath, 'Klasör')
+    await fs.mkdir(safeDir, { recursive: true })
   })
 
-  ipcMain.handle(IPC.DELETE_PATH, async (_e, targetPath: string) => {
-    await fs.rm(targetPath, { recursive: true, force: true })
+  handle(IPC.DELETE_PATH, async (_e, targetPath: string) => {
+    const safePath = assertAllowedPath(targetPath, 'Yol')
+    assertNotWorkspaceRoot(safePath, 'Silinecek yol')
+    await fs.rm(safePath, { recursive: true, force: true })
   })
 
-  ipcMain.handle(IPC.RENAME_PATH, async (_e, oldPath: string, newPath: string) => {
-    await fs.rename(oldPath, newPath)
+  handle(IPC.RENAME_PATH, async (_e, oldPath: string, newPath: string) => {
+    const safeOldPath = assertAllowedPath(oldPath, 'Eski yol')
+    const safeNewPath = assertAllowedPath(newPath, 'Yeni yol')
+    assertNotWorkspaceRoot(safeOldPath, 'Yeniden adlandırılacak yol')
+    assertSameAllowedRoot(safeOldPath, safeNewPath)
+    await fs.rename(safeOldPath, safeNewPath)
   })
 
   // ---- Watch the active workspace and notify the renderer on changes ----
   let watcher: FSWatcher | null = null
   let watchTimer: NodeJS.Timeout | null = null
-  ipcMain.handle(IPC.WATCH_DIR, (_e, dirPath: string | null) => {
+  handle(IPC.WATCH_DIR, (_e, dirPath: string | null) => {
     if (watcher) {
       try {
         watcher.close()
@@ -497,7 +531,8 @@ export function registerFileSystemHandlers(
     }
     if (!dirPath) return
     try {
-      watcher = fsWatch(dirPath, { recursive: true }, (_event, filename) => {
+      const safeDir = assertWorkspaceRoot(dirPath)
+      watcher = fsWatch(safeDir, { recursive: true }, (_event, filename) => {
         const name = String(filename ?? '')
         // Ignore churn from heavy/irrelevant folders.
         if (/(^|[\\/])(node_modules|\.git)([\\/]|$)/.test(name)) return
@@ -514,18 +549,19 @@ export function registerFileSystemHandlers(
     }
   })
 
-  ipcMain.handle(IPC.REVEAL_PATH, (_e, targetPath: string) => {
-    shell.showItemInFolder(targetPath)
+  handle(IPC.REVEAL_PATH, (_e, targetPath: string) => {
+    shell.showItemInFolder(assertAllowedPath(targetPath, 'Yol'))
   })
 
-  ipcMain.handle(IPC.COPY_TEXT, (_e, text: string) => {
+  handle(IPC.COPY_TEXT, (_e, text: string) => {
     clipboard.writeText(text)
   })
 
   // Flat recursive file list for quick-open (skips hidden folders, capped).
-  ipcMain.handle(
+  handle(
     IPC.LIST_FILES,
     async (_e, root: string, hidden: string[]): Promise<string[]> => {
+      const safeRoot = assertWorkspaceRoot(root)
       const hiddenSet = new Set(hidden.map((h) => h.toLowerCase()))
       const out: string[] = []
       const MAX = 8000
@@ -550,20 +586,22 @@ export function registerFileSystemHandlers(
         }
         await Promise.all(childDirs.map((childDir) => walk(childDir)))
       }
-      await walk(root)
+      await walk(safeRoot)
       return out
     }
   )
 
   // Git status for the workspace: branch + per-file status codes (abs path keys).
-  ipcMain.handle(
+  handle(
     IPC.GIT_STATUS,
     async (
       _e,
       root: string
     ): Promise<{ isRepo: boolean; branch: string; files: Record<string, string> }> => {
-      const repoRoot = await repoRootOf(root)
+      const safeRoot = assertAllowedPath(root, 'Çalışma klasörü')
+      const repoRoot = await repoRootOf(safeRoot)
       if (!repoRoot) return { isRepo: false, branch: '', files: {} }
+      assertAllowedPath(repoRoot, 'Git deposu')
       const branch = (await execGit(['rev-parse', '--abbrev-ref', 'HEAD'], repoRoot)).trim()
       if (!branch) return { isRepo: false, branch: '', files: {} }
       const porcelain = await execGit(['status', '--porcelain=v1', '--untracked-files=all'], repoRoot)
@@ -572,59 +610,76 @@ export function registerFileSystemHandlers(
     }
   )
 
-  ipcMain.handle(IPC.GIT_DIFF, async (_e, root: string, filePath: string): Promise<string> => {
-    return getGitDiff(root, filePath)
+  handle(IPC.GIT_DIFF, async (_e, root: string, filePath: string): Promise<string> => {
+    return getGitDiff(assertAllowedPath(root, 'Çalışma klasörü'), assertAllowedPath(filePath, 'Dosya'))
   })
 
-  ipcMain.handle(IPC.GIT_COMMIT_DIFF, async (_e, root: string, hash: string): Promise<string> => {
-    return getGitCommitDiff(root, hash)
+  handle(IPC.GIT_COMMIT_DIFF, async (_e, root: string, hash: string): Promise<string> => {
+    return getGitCommitDiff(assertAllowedPath(root, 'Çalışma klasörü'), hash)
   })
 
-  ipcMain.handle(
+  handle(
     IPC.GIT_FILE_SIDES,
-    async (_e, root: string, filePath: string, oldPath?: string) => gitFileSides(root, filePath, oldPath)
+    async (_e, root: string, filePath: string, oldPath?: string) =>
+      gitFileSides(
+        assertAllowedPath(root, 'Çalışma klasörü'),
+        assertAllowedPath(filePath, 'Dosya'),
+        oldPath
+      )
   )
 
-  ipcMain.handle(
+  handle(
     IPC.GIT_COMMIT,
     async (_e, root: string, message: string, paths: string[]): Promise<GitOverview> =>
-      gitCommit(root, message, paths)
+      gitCommit(
+        assertAllowedPath(root, 'Çalışma klasörü'),
+        message,
+        paths.map((item) => assertAllowedPath(item, 'Dosya'))
+      )
   )
 
-  ipcMain.handle(IPC.GIT_PUSH, async (_e, root: string): Promise<GitOverview> => gitPush(root))
+  handle(IPC.GIT_PUSH, async (_e, root: string): Promise<GitOverview> =>
+    gitPush(assertAllowedPath(root, 'Çalışma klasörü'))
+  )
 
-  ipcMain.handle(IPC.GIT_PULL, async (_e, root: string): Promise<GitOverview> => gitPull(root))
+  handle(IPC.GIT_PULL, async (_e, root: string): Promise<GitOverview> =>
+    gitPull(assertAllowedPath(root, 'Çalışma klasörü'))
+  )
 
-  ipcMain.handle(
+  handle(
     IPC.GIT_BRANCHES,
     async (_e, root: string): Promise<{ current: string; branches: string[] }> =>
-      gitBranches(root)
+      gitBranches(assertAllowedPath(root, 'Çalışma klasörü'))
   )
 
-  ipcMain.handle(
+  handle(
     IPC.GIT_CHECKOUT,
-    async (_e, root: string, name: string): Promise<GitOverview> => gitCheckout(root, name)
+    async (_e, root: string, name: string): Promise<GitOverview> =>
+      gitCheckout(assertAllowedPath(root, 'Çalışma klasörü'), name)
   )
 
-  ipcMain.handle(
+  handle(
     IPC.GIT_CREATE_BRANCH,
-    async (_e, root: string, name: string): Promise<GitOverview> => gitCreateBranch(root, name)
+    async (_e, root: string, name: string): Promise<GitOverview> =>
+      gitCreateBranch(assertAllowedPath(root, 'Çalışma klasörü'), name)
   )
 
-  ipcMain.handle(IPC.GIT_OVERVIEW, async (_e, root: string): Promise<GitOverview> => {
-    return getGitOverview(root)
+  handle(IPC.GIT_OVERVIEW, async (_e, root: string): Promise<GitOverview> => {
+    return getGitOverview(assertAllowedPath(root, 'Çalışma klasörü'))
   })
 
-  ipcMain.handle(IPC.GIT_FETCH, async (_e, root: string): Promise<GitOverview> => {
-    const repoRoot = (await execGit(['rev-parse', '--show-toplevel'], root)).trim()
+  handle(IPC.GIT_FETCH, async (_e, root: string): Promise<GitOverview> => {
+    const safeRoot = assertAllowedPath(root, 'Çalışma klasörü')
+    const repoRoot = (await execGit(['rev-parse', '--show-toplevel'], safeRoot)).trim()
     if (!repoRoot) return emptyGitOverview(root)
+    assertAllowedPath(repoRoot, 'Git deposu')
     await execGitStrict(['fetch', '--all', '--prune'], path.normalize(repoRoot))
     return getGitOverview(repoRoot)
   })
 
   // Clone a repository into parentDir. git emits progress on stderr (often with
   // carriage returns), which we stream to the renderer for a live status line.
-  ipcMain.handle(
+  handle(
     IPC.GIT_CLONE,
     async (_e, options: GitCloneOptions): Promise<{ path: string }> => {
       const url = normalizeRepoUrl(options.url)
@@ -632,8 +687,9 @@ export function registerFileSystemHandlers(
       if (!options.parentDir) throw new Error('Hedef konum seçilmedi')
 
       const name = options.folderName?.trim() ? deriveRepoName(options.folderName) : deriveRepoName(url)
-      const parentDir = path.resolve(options.parentDir)
+      const parentDir = assertWorkspaceRoot(options.parentDir)
       const target = path.resolve(parentDir, name)
+      assertAllowedPath(target, 'Hedef klasör')
       if (path.relative(parentDir, target).startsWith('..') || path.isAbsolute(path.relative(parentDir, target))) {
         throw new Error('Geçersiz hedef klasör')
       }
@@ -677,7 +733,10 @@ export function registerFileSystemHandlers(
           reject(new Error(`git başlatılamadı: ${err.message}`))
         )
         child.on('close', (code) => {
-          if (code === 0) resolve({ path: target })
+          if (code === 0) {
+            rememberWorkspaceRoot(target)
+            resolve({ path: target })
+          }
           else reject(new Error(stderr.trim() || `git clone ${code} koduyla başarısız oldu`))
         })
       })

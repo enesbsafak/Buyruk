@@ -10,7 +10,6 @@ import type { RecentFolder } from '../utils/persistence'
 import type { UseAccounts } from '../hooks/useAccounts'
 import type { AppUpdateStatus } from '../updateTypes'
 import type {
-  AiLimitsOverview,
   CliKind,
   GitChange,
   GitCommit,
@@ -31,7 +30,6 @@ interface AppViewProps {
   closeSettings: () => void
   commands: Command[]
   explorerNonce: number
-  aiLimits: AiLimitsOverview
   gitOverview: GitOverview
   gitPanelOpen: boolean
   gitStatus: GitStatus
@@ -63,7 +61,6 @@ interface AppViewProps {
   handleOpenTerminalHere: (cwd: string, type: TerminalType) => void
   handleRenameSession: (session: SessionRuntime) => void
   handleResetOrchestrator: () => void
-  handleRefreshAiLimits: () => void
   handleRefreshGit: () => void
   handleRestart: (session: SessionRuntime) => void
   handleSwitchAccount: (session: SessionRuntime, accountId: string) => void
@@ -102,7 +99,6 @@ export function AppView({
   closeSettings,
   commands,
   explorerNonce,
-  aiLimits,
   gitOverview,
   gitPanelOpen,
   gitStatus,
@@ -134,7 +130,6 @@ export function AppView({
   handleOpenTerminalHere,
   handleRenameSession,
   handleResetOrchestrator,
-  handleRefreshAiLimits,
   handleRefreshGit,
   handleRestart,
   handleSwitchAccount,
@@ -207,8 +202,6 @@ export function AppView({
         recents={recents}
         onOpenRecent={handleOpenRecent}
         onUpdateAiTools={handleUpdateAiTools}
-        aiLimits={aiLimits}
-        onRefreshAiLimits={handleRefreshAiLimits}
         orchestratorEnabled={orchestratorConfig.enabled}
         activeSession={activeSession}
         accounts={accounts}

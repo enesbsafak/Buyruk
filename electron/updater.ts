@@ -1,10 +1,11 @@
-import { app, type BrowserWindow, type IpcMain } from 'electron'
+import { app, type BrowserWindow, type IpcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import { rm } from 'node:fs/promises'
 import path from 'node:path'
 import { autoUpdater, type ProgressInfo, type UpdateInfo } from 'electron-updater'
 import log from 'electron-log/main'
 import { IPC } from './ipcChannels'
 import type { AppUpdateStatus } from '../src/updateTypes'
+import { assertTrustedIpcSender } from './security'
 
 const UPDATER_CACHE_DIR = 'buyruk-updater'
 
@@ -149,9 +150,32 @@ export function registerUpdaterHandlers(
 ): void {
   registerAutoUpdaterEvents(getWindow)
 
-  ipcMain.handle(IPC.UPDATE_GET_STATUS, () => currentStatus)
+  const handle = (
+    channel: string,
+    listener: (event: IpcMainInvokeEvent, ...args: any[]) => unknown
+  ): void => {
+    ipcMain.handle(channel, async (event, ...args) => {
+      assertTrustedIpcSender(event)
+      return listener(event, ...args)
+    })
+  }
+  const on = (
+    channel: string,
+    listener: (event: IpcMainEvent, ...args: any[]) => void
+  ): void => {
+    ipcMain.on(channel, (event, ...args) => {
+      try {
+        assertTrustedIpcSender(event)
+      } catch {
+        return
+      }
+      listener(event, ...args)
+    })
+  }
 
-  ipcMain.handle(IPC.UPDATE_CHECK, async () => {
+  handle(IPC.UPDATE_GET_STATUS, () => currentStatus)
+
+  handle(IPC.UPDATE_CHECK, async () => {
     if (!app.isPackaged) {
       return emitStatus(getWindow, {
         state: 'idle',
@@ -163,7 +187,7 @@ export function registerUpdaterHandlers(
     return checkForUpdatesWithCacheRetry(getWindow)
   })
 
-  ipcMain.on(IPC.UPDATE_INSTALL, () => {
+  on(IPC.UPDATE_INSTALL, () => {
     if (currentStatus.state === 'downloaded') {
       autoUpdater.quitAndInstall(false, true)
     }

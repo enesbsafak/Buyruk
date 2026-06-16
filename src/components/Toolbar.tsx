@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from './Icon'
 import { CliIcon } from './CliIcon'
-import { AiLimitsPopover } from './AiLimitsPopover'
 import { AccountSwitcher } from './AccountSwitcher'
+import { AiLimitsPopover } from './AiLimitsPopover'
 import { basename } from '../utils/pathUtils'
 import type { UseAccounts } from '../hooks/useAccounts'
 import type { RecentFolder } from '../utils/persistence'
-import type { AiLimitsOverview, CliKind, SessionRuntime, TerminalType } from '../types'
+import type { AiLimitsOverview, AiLimitsRequest, CliKind, SessionRuntime, TerminalType } from '../types'
 import brandLogo from '../assets/icon.png'
 
 interface ToolbarProps {
@@ -19,8 +19,6 @@ interface ToolbarProps {
   recents: RecentFolder[]
   onOpenRecent: (recent: RecentFolder) => void
   onUpdateAiTools: () => void
-  aiLimits: AiLimitsOverview
-  onRefreshAiLimits: () => void
   orchestratorEnabled: boolean
   activeSession: SessionRuntime | null
   accounts: UseAccounts
@@ -46,8 +44,6 @@ export function Toolbar({
   recents,
   onOpenRecent,
   onUpdateAiTools,
-  aiLimits,
-  onRefreshAiLimits,
   orchestratorEnabled,
   activeSession,
   accounts,
@@ -57,10 +53,39 @@ export function Toolbar({
   const [maximized, setMaximized] = useState(false)
   const [recentsOpen, setRecentsOpen] = useState(false)
   const [limitsOpen, setLimitsOpen] = useState(false)
+  const [limitsLoading, setLimitsLoading] = useState(false)
+  const [limitsError, setLimitsError] = useState<string | null>(null)
+  const [limitsOverview, setLimitsOverview] = useState<AiLimitsOverview | null>(null)
   const recentsRef = useRef<HTMLDivElement>(null)
   const limitsRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => window.api.windowControls.onMaximizedChange(setMaximized), [])
+
+  const limitRequest = (): AiLimitsRequest => {
+    const codexAccountId =
+      activeSession?.type === 'codex'
+        ? activeSession.accountId
+        : accounts.activeByType.codex
+    const claudeAccountId =
+      activeSession?.type === 'claude'
+        ? activeSession.accountId
+        : accounts.activeByType.claude
+    return { codexAccountId, claudeAccountId }
+  }
+
+  const loadLimits = async (force = false, clearBeforeLoad = false) => {
+    setLimitsLoading(true)
+    setLimitsError(null)
+    if (clearBeforeLoad) setLimitsOverview(null)
+    try {
+      const overview = await window.api.aiLimits.get({ ...limitRequest(), force })
+      setLimitsOverview(overview)
+    } catch (err) {
+      setLimitsError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setLimitsLoading(false)
+    }
+  }
 
   // Close the recents dropdown on any outside click.
   useEffect(() => {
@@ -74,17 +99,13 @@ export function Toolbar({
 
   useEffect(() => {
     if (!limitsOpen) return
+    void loadLimits(false, true)
     const onDown = (e: MouseEvent) => {
       if (!limitsRef.current?.contains(e.target as Node)) setLimitsOpen(false)
     }
     window.addEventListener('mousedown', onDown)
     return () => window.removeEventListener('mousedown', onDown)
-  }, [limitsOpen])
-
-  const openLimits = () => {
-    if (!limitsOpen) onRefreshAiLimits()
-    setLimitsOpen((open) => !open)
-  }
+  }, [limitsOpen, activeSession?.type, activeSession?.accountId, accounts.activeByType.codex, accounts.activeByType.claude])
 
   return (
     <header className="toolbar">
@@ -168,17 +189,20 @@ export function Toolbar({
       <div className="toolbar-popover-wrap no-drag" ref={limitsRef}>
         <button
           type="button"
-          className={`btn btn-ghost toolbar-action ${limitsOpen ? 'is-on' : ''}`}
-          title="Codex ve Claude limitleri"
-          aria-expanded={limitsOpen}
-          onClick={openLimits}
+          className={`icon-btn ${limitsOpen ? 'is-on' : ''}`}
+          title="AI kullanım limitleri"
+          onClick={() => setLimitsOpen((open) => !open)}
         >
-          <Icon name="bolt" size={15} />
-          <span className="toolbar-label">Limitler</span>
+          <Icon name="bolt" size={16} />
         </button>
         {limitsOpen && (
-          <div className="toolbar-popover limits-popover">
-            <AiLimitsPopover overview={aiLimits} onRefresh={onRefreshAiLimits} />
+          <div className="toolbar-popover ai-limits-popover">
+            <AiLimitsPopover
+              overview={limitsOverview}
+              loading={limitsLoading}
+              error={limitsError}
+              onRefresh={() => void loadLimits(true)}
+            />
           </div>
         )}
       </div>

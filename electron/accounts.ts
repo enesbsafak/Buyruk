@@ -1,9 +1,10 @@
-import { app, type IpcMain } from 'electron'
+import { app, type IpcMain, type IpcMainInvokeEvent } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { IPC } from './ipcChannels'
 import { shouldSeedClaudeConfigEntry } from '../src/utils/accountSafety'
+import { assertTrustedIpcSender } from './security'
 
 // CLI types that support multiple linked accounts. Plain shells (cmd/powershell)
 // have no notion of an account.
@@ -38,6 +39,17 @@ const STORE_DIR = 'cli-accounts'
 const STORE_FILE = 'accounts.json'
 // Each account gets its own directory; the CLI writes its credentials/config there.
 const DATA_DIR = 'data'
+const ACCOUNT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const MAX_LABEL_LENGTH = 80
+
+function isAccountId(value: unknown): value is string {
+  return typeof value === 'string' && ACCOUNT_ID.test(value)
+}
+
+function cleanLabel(value: unknown, fallback = 'Hesap'): string {
+  const label = typeof value === 'string' ? value.trim() : ''
+  return (label || fallback).slice(0, MAX_LABEL_LENGTH)
+}
 
 function storeRoot(): string {
   return path.join(app.getPath('userData'), STORE_DIR)
@@ -50,6 +62,7 @@ function storePath(): string {
 // Absolute path of the per-account config directory. This is what each CLI's
 // "config home" env var points at, so its auth lands in an isolated place.
 export function accountDir(id: string): string {
+  if (!isAccountId(id)) throw new Error('Geçersiz hesap id')
   return path.join(storeRoot(), DATA_DIR, id)
 }
 
@@ -63,6 +76,8 @@ function readStore(): AccountsState {
     const parsed = JSON.parse(raw) as Partial<AccountsState>
     const accounts = Array.isArray(parsed.accounts)
       ? parsed.accounts.filter((a): a is CliAccount => isCliKind(a?.type) && typeof a?.id === 'string')
+          .filter((a) => isAccountId(a.id))
+          .map((a) => ({ ...a, label: cleanLabel(a.label) }))
       : []
     const activeByType: AccountsState['activeByType'] = {}
     for (const type of CLI_KINDS) {
@@ -114,10 +129,11 @@ function findAccount(state: AccountsState, id: string): CliAccount | undefined {
 }
 
 function addAccount({ type, label }: AddAccountInput): AccountsState {
+  if (!isCliKind(type)) throw new Error('Geçersiz CLI türü')
   const state = readStore()
   const id = randomUUID()
   const now = Date.now()
-  const trimmed = label.trim() || 'Hesap'
+  const trimmed = cleanLabel(label)
   state.accounts.push({ id, type, label: trimmed, createdAt: now, lastUsedAt: now })
   // First account of a type becomes the default for that type.
   if (!state.activeByType[type]) state.activeByType[type] = id
@@ -128,6 +144,7 @@ function addAccount({ type, label }: AddAccountInput): AccountsState {
 }
 
 function removeAccount(id: string): AccountsState {
+  if (!isAccountId(id)) throw new Error('Geçersiz hesap id')
   const state = readStore()
   const account = findAccount(state, id)
   if (!account) return state
@@ -148,16 +165,19 @@ function removeAccount(id: string): AccountsState {
 }
 
 function renameAccount(id: string, label: string): AccountsState {
+  if (!isAccountId(id)) throw new Error('Geçersiz hesap id')
   const state = readStore()
   const account = findAccount(state, id)
   if (account) {
-    account.label = label.trim() || account.label
+    account.label = cleanLabel(label, account.label)
     writeStore(state)
   }
   return state
 }
 
 function setActiveAccount(type: CliKind, id: string): AccountsState {
+  if (!isCliKind(type)) throw new Error('Geçersiz CLI türü')
+  if (!isAccountId(id)) throw new Error('Geçersiz hesap id')
   const state = readStore()
   const account = findAccount(state, id)
   if (account?.type === type) {
@@ -178,6 +198,7 @@ export function accountLabel(id?: string, type?: CliKind): string | undefined {
 
 // Bump lastUsedAt when a session actually spawns under this account.
 export function touchAccount(id: string): void {
+  if (!isAccountId(id)) return
   const state = readStore()
   const account = findAccount(state, id)
   if (!account) return
@@ -186,7 +207,7 @@ export function touchAccount(id: string): void {
 }
 
 export function accountMatchesType(id: string | undefined, type: CliKind): boolean {
-  if (!id) return false
+  if (!isAccountId(id)) return false
   const account = findAccount(readStore(), id)
   return account?.type === type
 }
@@ -210,7 +231,7 @@ function accountEnv(type: CliKind, dir: string): Record<string, string> {
 // Resolve the env overrides for a terminal spawn given an (optional) accountId.
 // Returns {} when there is no account (plain shell, or AI CLI with no link yet).
 export function resolveTerminalEnv(type: CliKind | undefined, accountId?: string): Record<string, string> {
-  if (!accountId) return {}
+  if (!isAccountId(accountId)) return {}
   if (!type) return {}
   const state = readStore()
   const account = findAccount(state, accountId)
@@ -221,13 +242,23 @@ export function resolveTerminalEnv(type: CliKind | undefined, accountId?: string
 }
 
 export function registerAccountHandlers(ipcMain: IpcMain): void {
-  ipcMain.handle(IPC.ACCOUNTS_LIST, () => listAccounts())
-  ipcMain.handle(IPC.ACCOUNTS_ADD, (_e, input: AddAccountInput) => addAccount(input))
-  ipcMain.handle(IPC.ACCOUNTS_REMOVE, (_e, id: string) => removeAccount(id))
-  ipcMain.handle(IPC.ACCOUNTS_RENAME, (_e, id: string, label: string) =>
+  const handle = (
+    channel: string,
+    listener: (event: IpcMainInvokeEvent, ...args: any[]) => unknown
+  ): void => {
+    ipcMain.handle(channel, async (event, ...args) => {
+      assertTrustedIpcSender(event)
+      return listener(event, ...args)
+    })
+  }
+
+  handle(IPC.ACCOUNTS_LIST, () => listAccounts())
+  handle(IPC.ACCOUNTS_ADD, (_e, input: AddAccountInput) => addAccount(input))
+  handle(IPC.ACCOUNTS_REMOVE, (_e, id: string) => removeAccount(id))
+  handle(IPC.ACCOUNTS_RENAME, (_e, id: string, label: string) =>
     renameAccount(id, label)
   )
-  ipcMain.handle(IPC.ACCOUNTS_SET_ACTIVE, (_e, type: CliKind, id: string) =>
+  handle(IPC.ACCOUNTS_SET_ACTIVE, (_e, type: CliKind, id: string) =>
     setActiveAccount(type, id)
   )
 }

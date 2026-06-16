@@ -27,7 +27,6 @@ import {
 import { INITIAL_UPDATE_STATUS, type AppUpdateStatus } from './updateTypes'
 import {
   isCliKind,
-  type AiLimitsOverview,
   type CliKind,
   type GitChange,
   type GitCommit,
@@ -52,28 +51,6 @@ const EMPTY_GIT_OVERVIEW: GitOverview = {
   remoteActivity: [],
   lastUpdated: 0
 }
-const EMPTY_AI_LIMITS: AiLimitsOverview = {
-  tools: [
-    {
-      tool: 'codex',
-      label: 'Codex',
-      status: 'loading',
-      detail: 'Codex limitleri okunuyor',
-      windows: [],
-      updatedAt: null
-    },
-    {
-      tool: 'claude',
-      label: 'Claude',
-      status: 'loading',
-      detail: 'Claude limitleri okunuyor',
-      windows: [],
-      updatedAt: null
-    }
-  ],
-  lastUpdated: 0
-}
-
 const AI_TOOL_UPDATES = [
   { label: 'Codex', command: 'codex update' },
   { label: 'Claude', command: 'claude update' },
@@ -152,7 +129,6 @@ interface UiState {
   broadcast: boolean
   gitStatus: GitStatus
   gitOverview: GitOverview
-  aiLimits: AiLimitsOverview
   gitPanelOpen: boolean
   quickOpenOpen: boolean
   paletteOpen: boolean
@@ -168,7 +144,6 @@ type UiAction =
   | { type: 'toggle-broadcast' }
   | { type: 'set-git-status'; gitStatus: GitStatus }
   | { type: 'set-git-overview'; gitOverview: GitOverview }
-  | { type: 'set-ai-limits'; aiLimits: AiLimitsOverview }
   | { type: 'toggle-git-panel' }
   | { type: 'set-quick-open'; open: boolean }
   | { type: 'set-palette-open'; open: boolean }
@@ -184,7 +159,6 @@ function createInitialUiState(): UiState {
     broadcast: false,
     gitStatus: EMPTY_GIT,
     gitOverview: EMPTY_GIT_OVERVIEW,
-    aiLimits: EMPTY_AI_LIMITS,
     gitPanelOpen: false,
     quickOpenOpen: false,
     paletteOpen: false,
@@ -209,8 +183,6 @@ function uiReducer(state: UiState, action: UiAction): UiState {
       return { ...state, gitStatus: action.gitStatus }
     case 'set-git-overview':
       return { ...state, gitOverview: action.gitOverview }
-    case 'set-ai-limits':
-      return { ...state, aiLimits: action.aiLimits }
     case 'toggle-git-panel':
       return { ...state, gitPanelOpen: !state.gitPanelOpen }
     case 'set-quick-open':
@@ -1236,7 +1208,6 @@ function useAppModel() {
     broadcast,
     gitStatus,
     gitOverview,
-    aiLimits,
     gitPanelOpen,
     quickOpenOpen,
     paletteOpen,
@@ -1351,31 +1322,6 @@ function useAppModel() {
       dispatchUi({ type: 'set-update-status', status })
     )
   }, [])
-
-  const handleRefreshAiLimits = useCallback(() => {
-    window.api
-      .getAiLimits({ codexCommand: settings.codexCommand })
-      .then((overview) => dispatchUi({ type: 'set-ai-limits', aiLimits: overview }))
-      .catch((err: unknown) =>
-        dispatchUi({
-          type: 'set-ai-limits',
-          aiLimits: {
-            tools: EMPTY_AI_LIMITS.tools.map((tool) => ({
-              ...tool,
-              status: 'error',
-              detail: errMsg(err)
-            })),
-            lastUpdated: Date.now()
-          }
-        })
-      )
-  }, [settings.codexCommand])
-
-  useEffect(() => {
-    handleRefreshAiLimits()
-    const timer = window.setInterval(handleRefreshAiLimits, 120000)
-    return () => window.clearInterval(timer)
-  }, [handleRefreshAiLimits])
 
   const handleCheckForUpdates = useCallback(() => {
     window.api.updates
@@ -1524,7 +1470,6 @@ function useAppModel() {
     closeSettings,
     commands,
     explorerNonce,
-    aiLimits,
     gitStatus,
     gitOverview,
     gitPanelOpen,
@@ -1556,7 +1501,6 @@ function useAppModel() {
     handleOpenTerminalHere,
     handleRenameSession,
     handleResetOrchestrator,
-    handleRefreshAiLimits,
     handleRefreshGit,
     handleRestart,
     handleSwitchAccount,

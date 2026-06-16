@@ -1,7 +1,7 @@
 import { clipboard, contextBridge, ipcRenderer } from 'electron'
 import { IPC } from './ipcChannels'
 import type { AppUpdateStatus } from '../src/updateTypes'
-import type { AccountsState, AiLimitsOverview, CliKind, GitOverview } from '../src/types'
+import type { AccountsState, AiLimitsOverview, AiLimitsRequest, CliKind, GitOverview } from '../src/types'
 
 export interface FileNode {
   name: string
@@ -96,10 +96,6 @@ const api = {
     return () => ipcRenderer.removeListener(IPC.GIT_CLONE_PROGRESS, listener)
   },
 
-  // ---- AI limits ----
-  getAiLimits: (options: { codexCommand?: string }): Promise<AiLimitsOverview> =>
-    ipcRenderer.invoke(IPC.AI_LIMITS_GET, options),
-
   // ---- CLI accounts (multi-account linking) ----
   accounts: {
     list: (): Promise<AccountsState> => ipcRenderer.invoke(IPC.ACCOUNTS_LIST),
@@ -111,6 +107,12 @@ const api = {
       ipcRenderer.invoke(IPC.ACCOUNTS_RENAME, id, label),
     setActive: (type: CliKind, id: string): Promise<AccountsState> =>
       ipcRenderer.invoke(IPC.ACCOUNTS_SET_ACTIVE, type, id)
+  },
+
+  // ---- AI usage limits ----
+  aiLimits: {
+    get: (request?: AiLimitsRequest): Promise<AiLimitsOverview> =>
+      ipcRenderer.invoke(IPC.AI_LIMITS_GET, request)
   },
 
   // ---- Clipboard ----
