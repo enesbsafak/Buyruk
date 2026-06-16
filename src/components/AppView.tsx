@@ -209,9 +209,6 @@ export function AppView({
         onUpdateAiTools={handleUpdateAiTools}
         aiLimits={aiLimits}
         onRefreshAiLimits={handleRefreshAiLimits}
-        gitChangeCount={gitOverview.changes.length}
-        gitPanelOpen={gitPanelOpen}
-        onToggleGitPanel={toggleGitPanel}
         orchestratorEnabled={orchestratorConfig.enabled}
         activeSession={activeSession}
         accounts={accounts}

@@ -21,9 +21,6 @@ interface ToolbarProps {
   onUpdateAiTools: () => void
   aiLimits: AiLimitsOverview
   onRefreshAiLimits: () => void
-  gitChangeCount: number
-  gitPanelOpen: boolean
-  onToggleGitPanel: () => void
   orchestratorEnabled: boolean
   activeSession: SessionRuntime | null
   accounts: UseAccounts
@@ -51,9 +48,6 @@ export function Toolbar({
   onUpdateAiTools,
   aiLimits,
   onRefreshAiLimits,
-  gitChangeCount,
-  gitPanelOpen,
-  onToggleGitPanel,
   orchestratorEnabled,
   activeSession,
   accounts,
@@ -153,18 +147,6 @@ export function Toolbar({
         <Icon name="download" />
         <span className="toolbar-label">Klonla</span>
       </button>
-      <button
-        type="button"
-        className={`btn btn-ghost toolbar-action toolbar-git no-drag ${gitPanelOpen ? 'is-on' : ''}`}
-        title="Git paneli"
-        aria-pressed={gitPanelOpen}
-        onClick={onToggleGitPanel}
-      >
-        <Icon name="git-diff" />
-        <span className="toolbar-label">Git</span>
-        {gitChangeCount > 0 && <span className="toolbar-count">{gitChangeCount}</span>}
-      </button>
-
       <AccountSwitcher
         activeSession={activeSession}
         accounts={accounts}

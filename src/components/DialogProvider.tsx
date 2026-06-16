@@ -76,12 +76,22 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<DialogState>(null)
   const [toasts, setToasts] = useState<Toast[]>([])
   const resolver = useRef<((value: unknown) => void) | null>(null)
+  const stateRef = useRef<DialogState>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const settle = (value: string | boolean | null) => {
+    stateRef.current = null
     setState(null)
     resolver.current?.(value)
     resolver.current = null
+  }
+
+  const openDialog = (next: DialogState, resolve: (value: unknown) => void) => {
+    const previous = stateRef.current
+    resolver.current?.(previous?.kind === 'confirm' ? false : null)
+    resolver.current = resolve
+    stateRef.current = next
+    setState(next)
   }
 
   const dismiss = useCallback((id: string) => {
@@ -91,37 +101,34 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   const api = useRef<DialogApi>({
     prompt: (options) =>
       new Promise<string | null>((resolve) => {
-        resolver.current = resolve as (value: unknown) => void
-        setState({
+        openDialog({
           kind: 'prompt',
           title: options.title,
           label: options.label,
           placeholder: options.placeholder,
           confirmText: options.confirmText,
           value: options.defaultValue ?? ''
-        })
+        }, resolve as (value: unknown) => void)
         requestAnimationFrame(() => inputRef.current?.focus())
       }),
     confirm: (options) =>
       new Promise<boolean>((resolve) => {
-        resolver.current = resolve as (value: unknown) => void
-        setState({
+        openDialog({
           kind: 'confirm',
           title: options.title,
           message: options.message,
           danger: options.danger,
           confirmText: options.confirmText
-        })
+        }, resolve as (value: unknown) => void)
       }),
     choose: (options) =>
       new Promise<string | null>((resolve) => {
-        resolver.current = resolve as (value: unknown) => void
-        setState({
+        openDialog({
           kind: 'choose',
           title: options.title,
           message: options.message,
           options: options.options
-        })
+        }, resolve as (value: unknown) => void)
       }),
     notify: (message, type = 'info') => {
       const id = crypto.randomUUID()

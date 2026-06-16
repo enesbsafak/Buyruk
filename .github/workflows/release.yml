@@ -41,6 +41,9 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: React Doctor
+        run: npx react-doctor@latest -y --json
+
       - name: Build app
         run: npm run build
 

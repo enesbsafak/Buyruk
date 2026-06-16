@@ -4,7 +4,7 @@ import path from 'node:path'
 import type * as PtyType from 'node-pty'
 import { IPC } from './ipcChannels'
 import { withClaudeLimitBridge } from './aiLimits'
-import { accountLabel, resolveTerminalEnv, touchAccount } from './accounts'
+import { accountLabel, accountMatchesType, isCliKind, resolveTerminalEnv, touchAccount } from './accounts'
 
 // Load node-pty lazily so the app still launches (and shows its UI) even when the
 // native binary hasn't been compiled yet. Errors only surface when a terminal is
@@ -126,9 +126,10 @@ export class TerminalManager {
 
     // Layer the linked account's isolated config-dir env vars on top of the
     // inherited environment so each account's credentials stay separate.
-    const accountEnv = resolveTerminalEnv(options.accountId)
+    const cliType = isCliKind(options.type) ? options.type : undefined
+    const accountEnv = resolveTerminalEnv(cliType, options.accountId)
     const env = { ...(process.env as Record<string, string>), ...accountEnv }
-    if (options.accountId) touchAccount(options.accountId)
+    if (cliType && accountMatchesType(options.accountId, cliType)) touchAccount(options.accountId!)
 
     const ptyProcess = pty.spawn(file, args, {
       name: 'xterm-color',
@@ -155,7 +156,7 @@ export class TerminalManager {
   // any) sits right after the CLI label, matching the toolbar account menu.
   private buildTitle(options: CreateTerminalOptions): string {
     const parts = [TYPE_LABEL[options.type]]
-    const label = accountLabel(options.accountId)
+    const label = accountLabel(options.accountId, isCliKind(options.type) ? options.type : undefined)
     if (label) parts.push(label)
     parts.push(path.basename(options.cwd))
     return parts.join(' · ')

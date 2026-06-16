@@ -12,6 +12,12 @@ import { getLanguage, isImageFile } from './utils/language'
 import { basename, joinPath } from './utils/pathUtils'
 import { sessionTitle } from './utils/sessionTitle'
 import {
+  hasDirtyFiles,
+  hasDirtyFilesInPaths,
+  isDirtyEditableFile,
+  sessionHasDirtyFiles
+} from './utils/dirtyFiles'
+import {
   loadRecents,
   loadSavedSessions,
   pushRecent,
@@ -485,16 +491,7 @@ function useTerminalController({
     async (type: CliKind): Promise<string | null | undefined> => {
       const list = accounts.accountsByType(type)
       if (list.length === 0) {
-        const link = await dialog.confirm({
-          title: 'Bağlı hesap yok',
-          message: `Bu CLI için bağlı hesap yok. Şimdi bir hesap bağlamak ister misin?`,
-          confirmText: 'Hesap Bağla'
-        })
-        if (link) {
-          await addAccountFlow(type)
-          return null // addAccountFlow already opened the session
-        }
-        return undefined // proceed without an account
+        return undefined
       }
 
       const defaultId = accounts.resolveDefault(type)?.id
@@ -543,7 +540,7 @@ function useTerminalController({
   const handleSwitchAccount = useCallback(
     async (session: SessionRuntime, accountId: string) => {
       if (!isCliKind(session.type) || session.accountId === accountId) return
-      const label = accounts.accountById(accountId)?.label
+      const label = accounts.accountByIdOfType(accountId, session.type)?.label
       actions.setAccount(session.id, accountId)
       // Reflect the new account in the tab title (matches the create/restore format).
       actions.rename(session.id, sessionTitle(session.type, session.cwd, label))
@@ -689,6 +686,16 @@ function useTerminalController({
 
   const handleCloseSession = useCallback(
     async (id: string) => {
+      const session = sessionsRef.current.find((item) => item.id === id)
+      if (session && sessionHasDirtyFiles(session)) {
+        const ok = await dialog.confirm({
+          title: 'Terminali Kapat',
+          message: 'Bu terminalde kaydedilmemiş dosyalar var. Yine de kapatılsın mı?',
+          danger: true,
+          confirmText: 'Kapat'
+        })
+        if (!ok) return
+      }
       try {
         await window.api.killTerminal(id)
       } catch {
@@ -697,7 +704,7 @@ function useTerminalController({
       terminalBus.clear(id)
       actions.remove(id)
     },
-    [actions]
+    [actions, dialog, sessionsRef]
   )
 
   const handleCloseActive = useCallback(() => {
@@ -730,6 +737,7 @@ interface FileControllerOptions {
   dialog: ReturnType<typeof useDialog>
   defaultProjectDir: string
   explorerNonce: number
+  settings: Settings
   sessionsRef: { current: SessionRuntime[] }
   bumpExplorer: () => void
   dispatchUi: (action: UiAction) => void
@@ -743,6 +751,7 @@ function useFileController({
   dialog,
   defaultProjectDir,
   explorerNonce,
+  settings,
   sessionsRef,
   bumpExplorer,
   dispatchUi
@@ -830,22 +839,29 @@ function useFileController({
   // decorations) and bump the explorer (working tree may have changed).
   const applyGitResult = useCallback(
     async (root: string, overview: GitOverview) => {
+      if (activeSessionRef.current?.cwd !== root) return
       dispatchUi({ type: 'set-git-overview', gitOverview: overview })
       try {
         const status = await window.api.gitStatus(root)
-        dispatchUi({ type: 'set-git-status', gitStatus: status })
+        if (activeSessionRef.current?.cwd === root) {
+          dispatchUi({ type: 'set-git-status', gitStatus: status })
+        }
       } catch {
         // status refresh best-effort
       }
       bumpExplorer()
     },
-    [dispatchUi, bumpExplorer]
+    [activeSessionRef, dispatchUi, bumpExplorer]
   )
 
   const handleGitCommit = useCallback(
     async (message: string, paths: string[]): Promise<boolean> => {
       const root = activeSessionRef.current?.cwd
       if (!root) return false
+      if (hasDirtyFilesInPaths(sessionsRef.current, paths)) {
+        dialog.notify('Seçili dosyalarda kaydedilmemiş editör değişikliği var. Önce kaydet.', 'error')
+        return false
+      }
       try {
         const overview = await window.api.gitCommit(root, message, paths)
         await applyGitResult(root, overview)
@@ -857,7 +873,7 @@ function useFileController({
         return false
       }
     },
-    [activeSessionRef, applyGitResult, dialog, dispatchUi]
+    [activeSessionRef, applyGitResult, dialog, dispatchUi, sessionsRef]
   )
 
   const handleGitPush = useCallback(async () => {
@@ -876,6 +892,10 @@ function useFileController({
   const handleGitPull = useCallback(async () => {
     const root = activeSessionRef.current?.cwd
     if (!root) return
+    if (hasDirtyFiles(sessionsRef.current)) {
+      dialog.notify('Pull öncesi kaydedilmemiş editör değişikliklerini kaydet.', 'error')
+      return
+    }
     dispatchUi({ type: 'set-status-message', message: 'Pull ediliyor…' })
     try {
       const overview = await window.api.gitPull(root)
@@ -884,12 +904,16 @@ function useFileController({
     } catch (err) {
       dialog.notify(`Pull başarısız: ${errMsg(err)}`, 'error')
     }
-  }, [activeSessionRef, applyGitResult, dialog, dispatchUi])
+  }, [activeSessionRef, applyGitResult, dialog, dispatchUi, sessionsRef])
 
   const handleCheckoutBranch = useCallback(
     async (name: string) => {
       const root = activeSessionRef.current?.cwd
       if (!root) return
+      if (hasDirtyFiles(sessionsRef.current)) {
+        dialog.notify('Branch değiştirmeden önce kaydedilmemiş editör değişikliklerini kaydet.', 'error')
+        return
+      }
       try {
         const overview = await window.api.gitCheckout(root, name)
         await applyGitResult(root, overview)
@@ -898,12 +922,16 @@ function useFileController({
         dialog.notify(`Branch değiştirilemedi: ${errMsg(err)}`, 'error')
       }
     },
-    [activeSessionRef, applyGitResult, dialog, dispatchUi]
+    [activeSessionRef, applyGitResult, dialog, dispatchUi, sessionsRef]
   )
 
   const handleCreateBranch = useCallback(async () => {
     const root = activeSessionRef.current?.cwd
     if (!root) return
+    if (hasDirtyFiles(sessionsRef.current)) {
+      dialog.notify('Branch oluşturmadan önce kaydedilmemiş editör değişikliklerini kaydet.', 'error')
+      return
+    }
     const name = await dialog.prompt({
       title: 'Yeni Branch',
       label: 'Branch adı',
@@ -919,7 +947,7 @@ function useFileController({
     } catch (err) {
       dialog.notify(`Branch oluşturulamadı: ${errMsg(err)}`, 'error')
     }
-  }, [activeSessionRef, applyGitResult, dialog, dispatchUi])
+  }, [activeSessionRef, applyGitResult, dialog, dispatchUi, sessionsRef])
 
   // Open a changed file as a read-only side-by-side diff (HEAD vs working tree).
   const handleOpenFileDiff = useCallback(
@@ -927,7 +955,7 @@ function useFileController({
       const session = activeSessionRef.current
       if (!session) return
       try {
-        const sides = await window.api.gitFileSides(session.cwd, change.absolutePath)
+        const sides = await window.api.gitFileSides(session.cwd, change.absolutePath, change.oldPath)
         if (sides.binary) {
           dialog.notify('İkili dosya — fark gösterilemiyor.', 'info')
           return
@@ -956,12 +984,40 @@ function useFileController({
       dialog.notify('Önce bir terminal oturumu açın.', 'info')
       return
     }
+    if (sessionHasDirtyFiles(activeSession)) {
+      const ok = await dialog.confirm({
+        title: 'Klasör Değiştir',
+        message: 'Bu oturumda kaydedilmemiş dosyalar var. Klasör değiştirince terminal yeniden başlatılacak. Devam edilsin mi?',
+        danger: true,
+        confirmText: 'Devam Et'
+      })
+      if (!ok) return
+    }
     const dir = await window.api.selectFolder(defaultProjectDir || undefined)
     if (!dir) return
-    const accountLabel = accounts.accountById(activeSession.accountId)?.label
-    actions.setCwd(activeSession.id, dir, sessionTitle(activeSession.type, dir, accountLabel))
+    const accountLabel = isCliKind(activeSession.type)
+      ? accounts.accountByIdOfType(activeSession.accountId, activeSession.type)?.label
+      : undefined
+    const title = sessionTitle(activeSession.type, dir, accountLabel)
+    try {
+      terminalBus.clear(activeSession.id)
+      await window.api.restartTerminal({
+        id: activeSession.id,
+        type: activeSession.type,
+        cwd: dir,
+        command: commandFor(activeSession.type, settings),
+        cols: 80,
+        rows: 24,
+        accountId: activeSession.accountId
+      })
+      actions.setCwd(activeSession.id, dir, title)
+      actions.restart(activeSession.id)
+      dispatchUi({ type: 'set-status-message', message: `Klasör değişti: ${basename(dir)}` })
+    } catch (err) {
+      dialog.notify(`Klasör değiştirilemedi: ${errMsg(err)}`, 'error')
+    }
     bumpExplorer()
-  }, [activeSession, actions, accounts, bumpExplorer, dialog, defaultProjectDir])
+  }, [activeSession, actions, accounts, bumpExplorer, dialog, defaultProjectDir, dispatchUi, settings])
 
   const handleNewFolder = useCallback(async () => {
     const parent = await window.api.createFolderDialog(defaultProjectDir || undefined)
@@ -1121,11 +1177,22 @@ function useFileController({
   )
 
   const handleCloseFile = useCallback(
-    (path: string) => {
+    async (path: string) => {
       const session = activeSessionRef.current
-      if (session) actions.closeFile(session.id, path)
+      if (!session) return
+      const file = session.openFiles.find((item) => item.path === path)
+      if (file && isDirtyEditableFile(file)) {
+        const ok = await dialog.confirm({
+          title: 'Dosyayı Kapat',
+          message: `${file.name} kaydedilmemiş. Yine de kapatılsın mı?`,
+          danger: true,
+          confirmText: 'Kapat'
+        })
+        if (!ok) return
+      }
+      actions.closeFile(session.id, path)
     },
-    [activeSessionRef, actions]
+    [activeSessionRef, actions, dialog]
   )
 
   return {
@@ -1261,6 +1328,7 @@ function useAppModel() {
     dialog,
     defaultProjectDir: settings.defaultProjectDir,
     explorerNonce,
+    settings,
     sessionsRef,
     bumpExplorer,
     dispatchUi
@@ -1337,11 +1405,7 @@ function useAppModel() {
   // Confirm before closing if there are unsaved editor changes.
   useEffect(() => {
     return window.api.windowControls.onConfirmClose(async () => {
-      const hasUnsaved = sessionsRef.current.some((s) =>
-        s.openFiles.some(
-          (f) => !f.readOnly && !f.isBinary && !f.isImage && f.content !== f.savedContent
-        )
-      )
+      const hasUnsaved = hasDirtyFiles(sessionsRef.current)
       if (!hasUnsaved) {
         window.api.windowControls.doClose()
         return

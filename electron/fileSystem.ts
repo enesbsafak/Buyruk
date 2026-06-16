@@ -12,6 +12,12 @@ import { execFile, spawn } from 'node:child_process'
 import path from 'node:path'
 import { IPC } from './ipcChannels'
 import type { GitChange, GitCommit, GitOverview, GitRemoteActivity } from '../src/types'
+import {
+  buildSelectedCommitArgs,
+  isSafeBranchName,
+  parseGitStatusFiles,
+  relativeGitPath
+} from '../src/utils/gitSafety'
 
 function execGit(args: string[], cwd: string): Promise<string> {
   return new Promise((resolve) => {
@@ -80,19 +86,11 @@ function deriveRepoName(url: string): string {
 
 const MAX_TEXT_SIZE = 5 * 1024 * 1024 // 5 MB
 const BINARY_SNIFF_BYTES = 8000
-const GIT_RENAME_ARROW = /^.* -> (.*)$/
+const GIT_RENAME_PARTS = /^(.*) -> (.*)$/
 const FIELD_SEP = '\x1f'
 
 function toGitPath(filePath: string): string {
   return filePath.split(path.sep).join('/')
-}
-
-function relativeGitPath(repoRoot: string, filePath: string): string | null {
-  const relativePath = path.relative(repoRoot, filePath)
-  if (!relativePath || relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
-    return null
-  }
-  return toGitPath(relativePath)
 }
 
 function emptyGitOverview(root: string): GitOverview {
@@ -128,11 +126,13 @@ function parsePorcelain(root: string, porcelain: string): GitChange[] {
     const y = line[1]
     const status = line.slice(0, 2)
     let file = line.slice(3)
-    file = GIT_RENAME_ARROW.exec(file)?.[1] ?? file
-    file = file.replace(/^"|"$/g, '')
+    const renameParts = GIT_RENAME_PARTS.exec(file)
+    const oldPath = renameParts?.[1]?.replace(/^"|"$/g, '')
+    file = (renameParts?.[2] ?? file).replace(/^"|"$/g, '')
 
     changes.push({
       path: toGitPath(file),
+      oldPath: oldPath ? toGitPath(oldPath) : undefined,
       absolutePath: path.join(root, file),
       status: status.trim() || status,
       staged: x !== ' ' && x !== '?',
@@ -282,7 +282,7 @@ async function gitCommit(root: string, message: string, paths: string[]): Promis
     .filter((p): p is string => !!p)
   if (rels.length === 0) throw new Error('Commit için en az bir dosya seç')
   await execGitStrict(['add', '-A', '--', ...rels], repoRoot)
-  await execGitStrict(['commit', '-m', msg], repoRoot)
+  await execGitStrict(buildSelectedCommitArgs(msg, rels), repoRoot)
   return getGitOverview(repoRoot)
 }
 
@@ -304,10 +304,10 @@ async function gitBranches(root: string): Promise<{ current: string; branches: s
   const repoRoot = await repoRootOf(root)
   if (!repoRoot) return { current: '', branches: [] }
   const out = await execGit(['branch', '--format=%(refname:short)'], repoRoot)
-  const branches = out
-    .split('\n')
-    .map((s) => s.trim())
-    .filter(Boolean)
+  const branches = out.split('\n').flatMap((s) => {
+    const branch = s.trim()
+    return branch ? [branch] : []
+  })
   const current = (await execGit(['rev-parse', '--abbrev-ref', 'HEAD'], repoRoot)).trim()
   return { current, branches }
 }
@@ -315,7 +315,10 @@ async function gitBranches(root: string): Promise<{ current: string; branches: s
 async function gitCheckout(root: string, name: string): Promise<GitOverview> {
   const repoRoot = await repoRootOf(root)
   if (!repoRoot) throw new Error('Git deposu bulunamadı')
-  await execGitStrict(['checkout', name], repoRoot)
+  const branch = name.trim()
+  if (!isSafeBranchName(branch)) throw new Error('Geçersiz branch adı')
+  await execGitStrict(['check-ref-format', '--branch', branch], repoRoot)
+  await execGitStrict(['checkout', branch], repoRoot)
   return getGitOverview(repoRoot)
 }
 
@@ -323,7 +326,8 @@ async function gitCreateBranch(root: string, name: string): Promise<GitOverview>
   const repoRoot = await repoRootOf(root)
   if (!repoRoot) throw new Error('Git deposu bulunamadı')
   const branch = name.trim()
-  if (!branch) throw new Error('Branch adı boş olamaz')
+  if (!isSafeBranchName(branch)) throw new Error('Geçersiz branch adı')
+  await execGitStrict(['check-ref-format', '--branch', branch], repoRoot)
   await execGitStrict(['checkout', '-b', branch], repoRoot)
   return getGitOverview(repoRoot)
 }
@@ -332,14 +336,15 @@ async function gitCreateBranch(root: string, name: string): Promise<GitOverview>
 // on disk (working tree). New files have no original; deleted files have no modified.
 async function gitFileSides(
   root: string,
-  filePath: string
+  filePath: string,
+  oldPath?: string
 ): Promise<{ original: string; modified: string; binary: boolean }> {
   const repoRoot = await repoRootOf(root)
   if (!repoRoot) return { original: '', modified: '', binary: false }
   const rel = relativeGitPath(repoRoot, path.normalize(filePath))
   if (!rel) return { original: '', modified: '', binary: false }
 
-  const original = await execGit(['show', `HEAD:${rel}`], repoRoot)
+  const original = await execGit(['show', `HEAD:${oldPath || rel}`], repoRoot)
   let modified = ''
   let binary = false
   try {
@@ -557,18 +562,12 @@ export function registerFileSystemHandlers(
       _e,
       root: string
     ): Promise<{ isRepo: boolean; branch: string; files: Record<string, string> }> => {
-      const branch = (await execGit(['rev-parse', '--abbrev-ref', 'HEAD'], root)).trim()
+      const repoRoot = await repoRootOf(root)
+      if (!repoRoot) return { isRepo: false, branch: '', files: {} }
+      const branch = (await execGit(['rev-parse', '--abbrev-ref', 'HEAD'], repoRoot)).trim()
       if (!branch) return { isRepo: false, branch: '', files: {} }
-      const porcelain = await execGit(['status', '--porcelain'], root)
-      const files: Record<string, string> = {}
-      for (const line of porcelain.split('\n')) {
-        if (!line.trim()) continue
-        const code = line.slice(0, 2).trim()
-        let file = line.slice(3)
-        file = GIT_RENAME_ARROW.exec(file)?.[1] ?? file
-        file = file.replace(/^"|"$/g, '')
-        files[path.join(root, file).toLowerCase()] = code
-      }
+      const porcelain = await execGit(['status', '--porcelain=v1', '--untracked-files=all'], repoRoot)
+      const files = parseGitStatusFiles(repoRoot, porcelain)
       return { isRepo: true, branch, files }
     }
   )
@@ -583,7 +582,7 @@ export function registerFileSystemHandlers(
 
   ipcMain.handle(
     IPC.GIT_FILE_SIDES,
-    async (_e, root: string, filePath: string) => gitFileSides(root, filePath)
+    async (_e, root: string, filePath: string, oldPath?: string) => gitFileSides(root, filePath, oldPath)
   )
 
   ipcMain.handle(
@@ -619,7 +618,7 @@ export function registerFileSystemHandlers(
   ipcMain.handle(IPC.GIT_FETCH, async (_e, root: string): Promise<GitOverview> => {
     const repoRoot = (await execGit(['rev-parse', '--show-toplevel'], root)).trim()
     if (!repoRoot) return emptyGitOverview(root)
-    await execGit(['fetch', '--all', '--prune'], path.normalize(repoRoot))
+    await execGitStrict(['fetch', '--all', '--prune'], path.normalize(repoRoot))
     return getGitOverview(repoRoot)
   })
 
@@ -632,8 +631,12 @@ export function registerFileSystemHandlers(
       if (!url) throw new Error('Geçersiz depo adresi')
       if (!options.parentDir) throw new Error('Hedef konum seçilmedi')
 
-      const name = options.folderName?.trim() || deriveRepoName(url)
-      const target = path.join(options.parentDir, name)
+      const name = options.folderName?.trim() ? deriveRepoName(options.folderName) : deriveRepoName(url)
+      const parentDir = path.resolve(options.parentDir)
+      const target = path.resolve(parentDir, name)
+      if (path.relative(parentDir, target).startsWith('..') || path.isAbsolute(path.relative(parentDir, target))) {
+        throw new Error('Geçersiz hedef klasör')
+      }
 
       // Refuse to clone into an existing, non-empty directory.
       let existing: string[] | null = null
@@ -663,8 +666,10 @@ export function registerFileSystemHandlers(
           stderr += text
           const last = text
             .split(/[\r\n]/)
-            .map((line) => line.trim())
-            .filter(Boolean)
+            .flatMap((line) => {
+              const trimmed = line.trim()
+              return trimmed ? [trimmed] : []
+            })
             .pop()
           if (last) sendProgress(last)
         })

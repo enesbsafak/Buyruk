@@ -36,7 +36,7 @@ declare global {
       gitOverview(root: string): Promise<GitOverview>
       gitDiff(root: string, filePath: string): Promise<string>
       gitCommitDiff(root: string, hash: string): Promise<string>
-      gitFileSides(root: string, filePath: string): Promise<GitFileSides>
+      gitFileSides(root: string, filePath: string, oldPath?: string): Promise<GitFileSides>
       gitFetch(root: string): Promise<GitOverview>
       gitCommit(root: string, message: string, paths: string[]): Promise<GitOverview>
       gitPush(root: string): Promise<GitOverview>

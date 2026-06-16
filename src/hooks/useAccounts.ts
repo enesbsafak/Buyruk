@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { AccountsState, CliAccount, CliKind } from '../types'
+import {
+  accountByIdForType,
+  accountsByType as filterAccountsByType,
+  resolveDefaultAccount
+} from '../utils/accountSafety'
 
 const EMPTY: AccountsState = { accounts: [], activeByType: {} }
 
@@ -32,9 +37,12 @@ export function useAccounts() {
     const next = await window.api.accounts.add({ type, label })
     setState(next)
     // The newest account of this type is the one we just created.
-    const created = [...next.accounts]
-      .filter((a) => a.type === type)
-      .sort((a, b) => b.createdAt - a.createdAt)[0]
+    let created: CliAccount | undefined
+    for (const account of next.accounts) {
+      if (account.type === type && (!created || account.createdAt > created.createdAt)) {
+        created = account
+      }
+    }
     return created as CliAccount | undefined
   }, [])
 
@@ -51,8 +59,8 @@ export function useAccounts() {
   }, [])
 
   const accountsByType = useCallback(
-    (type: CliKind) => state.accounts.filter((a) => a.type === type),
-    [state.accounts]
+    (type: CliKind) => filterAccountsByType(state, type),
+    [state]
   )
 
   const accountById = useCallback(
@@ -64,10 +72,14 @@ export function useAccounts() {
   // account, falling back to the first linked account of that type.
   const resolveDefault = useCallback(
     (type: CliKind): CliAccount | undefined => {
-      const activeId = state.activeByType[type]
-      return accountById(activeId) ?? accountsByType(type)[0]
+      return resolveDefaultAccount(state, type)
     },
-    [state.activeByType, accountById, accountsByType]
+    [state]
+  )
+
+  const accountByIdOfType = useCallback(
+    (id: string | undefined, type: CliKind) => accountByIdForType(state, id, type),
+    [state]
   )
 
   return useMemo(
@@ -82,9 +94,10 @@ export function useAccounts() {
       setActive,
       accountsByType,
       accountById,
+      accountByIdOfType,
       resolveDefault
     }),
-    [state, refresh, add, remove, rename, setActive, accountsByType, accountById, resolveDefault]
+    [state, refresh, add, remove, rename, setActive, accountsByType, accountById, accountByIdOfType, resolveDefault]
   )
 }
 

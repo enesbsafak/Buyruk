@@ -1,8 +1,9 @@
 import { app, type IpcMain } from 'electron'
 import { randomUUID } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { IPC } from './ipcChannels'
+import { shouldSeedClaudeConfigEntry } from '../src/utils/accountSafety'
 
 // CLI types that support multiple linked accounts. Plain shells (cmd/powershell)
 // have no notion of an account.
@@ -63,7 +64,13 @@ function readStore(): AccountsState {
     const accounts = Array.isArray(parsed.accounts)
       ? parsed.accounts.filter((a): a is CliAccount => isCliKind(a?.type) && typeof a?.id === 'string')
       : []
-    const activeByType = (parsed.activeByType ?? {}) as AccountsState['activeByType']
+    const activeByType: AccountsState['activeByType'] = {}
+    for (const type of CLI_KINDS) {
+      const id = (parsed.activeByType ?? {})[type]
+      if (typeof id === 'string' && accounts.some((account) => account.id === id && account.type === type)) {
+        activeByType[type] = id
+      }
+    }
     return { accounts, activeByType }
   } catch {
     return emptyState()
@@ -75,7 +82,30 @@ function writeStore(state: AccountsState): void {
   writeFileSync(storePath(), `${JSON.stringify(state, null, 2)}\n`, 'utf8')
 }
 
-export function listAccounts(): AccountsState {
+function seedClaudeAccountDir(dir: string): void {
+  const source = path.join(app.getPath('home'), '.claude')
+  if (!existsSync(source)) return
+
+  for (const name of readdirSync(source)) {
+    if (!shouldSeedClaudeConfigEntry(name)) continue
+    const from = path.join(source, name)
+    const to = path.join(dir, name)
+    if (existsSync(to)) continue
+    try {
+      cpSync(from, to, { recursive: true, force: false })
+    } catch {
+      // Keep account creation usable even if one optional config entry is locked.
+    }
+  }
+}
+
+function prepareAccountDir(account: CliAccount): void {
+  const dir = accountDir(account.id)
+  mkdirSync(dir, { recursive: true })
+  if (account.type === 'claude') seedClaudeAccountDir(dir)
+}
+
+function listAccounts(): AccountsState {
   return readStore()
 }
 
@@ -83,7 +113,7 @@ function findAccount(state: AccountsState, id: string): CliAccount | undefined {
   return state.accounts.find((a) => a.id === id)
 }
 
-export function addAccount({ type, label }: AddAccountInput): AccountsState {
+function addAccount({ type, label }: AddAccountInput): AccountsState {
   const state = readStore()
   const id = randomUUID()
   const now = Date.now()
@@ -92,32 +122,32 @@ export function addAccount({ type, label }: AddAccountInput): AccountsState {
   // First account of a type becomes the default for that type.
   if (!state.activeByType[type]) state.activeByType[type] = id
   // Pre-create the config directory so the CLI can write into it on first login.
-  mkdirSync(accountDir(id), { recursive: true })
+  prepareAccountDir(state.accounts[state.accounts.length - 1])
   writeStore(state)
   return state
 }
 
-export function removeAccount(id: string): AccountsState {
+function removeAccount(id: string): AccountsState {
   const state = readStore()
   const account = findAccount(state, id)
   if (!account) return state
+  try {
+    rmSync(accountDir(id), { recursive: true, force: true })
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    throw new Error(`Hesap dosyaları silinemedi: ${detail}`)
+  }
   state.accounts = state.accounts.filter((a) => a.id !== id)
   if (state.activeByType[account.type] === id) {
     const next = state.accounts.find((a) => a.type === account.type)
     if (next) state.activeByType[account.type] = next.id
     else delete state.activeByType[account.type]
   }
-  // Remove the stored credentials/config for this account.
-  try {
-    rmSync(accountDir(id), { recursive: true, force: true })
-  } catch {
-    // directory may already be gone
-  }
   writeStore(state)
   return state
 }
 
-export function renameAccount(id: string, label: string): AccountsState {
+function renameAccount(id: string, label: string): AccountsState {
   const state = readStore()
   const account = findAccount(state, id)
   if (account) {
@@ -127,9 +157,10 @@ export function renameAccount(id: string, label: string): AccountsState {
   return state
 }
 
-export function setActiveAccount(type: CliKind, id: string): AccountsState {
+function setActiveAccount(type: CliKind, id: string): AccountsState {
   const state = readStore()
-  if (findAccount(state, id)) {
+  const account = findAccount(state, id)
+  if (account?.type === type) {
     state.activeByType[type] = id
     writeStore(state)
   }
@@ -138,9 +169,11 @@ export function setActiveAccount(type: CliKind, id: string): AccountsState {
 
 // Resolve an account's display label (for terminal titles). Undefined when the
 // id is missing or no longer linked.
-export function accountLabel(id?: string): string | undefined {
+export function accountLabel(id?: string, type?: CliKind): string | undefined {
   if (!id) return undefined
-  return findAccount(readStore(), id)?.label
+  const account = findAccount(readStore(), id)
+  if (!account || (type && account.type !== type)) return undefined
+  return account.label
 }
 
 // Bump lastUsedAt when a session actually spawns under this account.
@@ -152,10 +185,16 @@ export function touchAccount(id: string): void {
   writeStore(state)
 }
 
+export function accountMatchesType(id: string | undefined, type: CliKind): boolean {
+  if (!id) return false
+  const account = findAccount(readStore(), id)
+  return account?.type === type
+}
+
 // Map an account's config directory to the env var(s) each CLI reads to locate
 // its credentials. Setting these only on the spawned terminal isolates accounts
 // without touching the user's global config.
-export function accountEnv(type: CliKind, dir: string): Record<string, string> {
+function accountEnv(type: CliKind, dir: string): Record<string, string> {
   switch (type) {
     case 'claude':
       return { CLAUDE_CONFIG_DIR: dir }
@@ -170,11 +209,12 @@ export function accountEnv(type: CliKind, dir: string): Record<string, string> {
 
 // Resolve the env overrides for a terminal spawn given an (optional) accountId.
 // Returns {} when there is no account (plain shell, or AI CLI with no link yet).
-export function resolveTerminalEnv(accountId?: string): Record<string, string> {
+export function resolveTerminalEnv(type: CliKind | undefined, accountId?: string): Record<string, string> {
   if (!accountId) return {}
+  if (!type) return {}
   const state = readStore()
   const account = findAccount(state, accountId)
-  if (!account) return {}
+  if (!account || account.type !== type) return {}
   const dir = accountDir(account.id)
   mkdirSync(dir, { recursive: true })
   return accountEnv(account.type, dir)

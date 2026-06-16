@@ -608,6 +608,51 @@ button {
   background: var(--accent);
 }
 
+.workspace-sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg-1);
+}
+.workspace-sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding: 7px 8px 7px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-2);
+}
+.workspace-sidebar-title {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.workspace-sidebar-body {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.sidebar-git-toggle {
+  gap: 6px;
+  min-height: 27px;
+  padding: 4px 7px;
+  font-size: 11.5px;
+}
+.sidebar-git-toggle.is-on {
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+
 /* ---------- Terminal area (auto-tiling grid) ---------- */
 .terminal-area {
   display: flex;

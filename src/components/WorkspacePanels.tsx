@@ -3,6 +3,7 @@ import { FileExplorer } from './FileExplorer'
 import { CodeEditor } from './CodeEditor'
 import { SplitLayout } from './SplitLayout'
 import { GitPanel } from './GitPanel'
+import { Icon } from './Icon'
 import type {
   GitChange,
   GitCommit,
@@ -132,28 +133,46 @@ export function WorkspacePanels({
           onToggleBroadcast={onToggleBroadcast}
         />
 
-        {/* Right sidebar: file explorer on top, then (optionally) the git panel
-            directly beneath it, with the editor at the bottom. */}
-        <SplitLayout direction="vertical" initial={320} min={120}>
-          <FileExplorer
-            rootPath={activeSession?.cwd ?? null}
-            hiddenFolders={settings.hiddenFolders}
-            gitFiles={gitStatus.files}
-            onOpenFile={onOpenFile}
-            onOpenGitDiff={onOpenGitDiff}
-            onOpenTerminalHere={onOpenTerminalHere}
-            refreshNonce={explorerNonce}
-            onRefresh={onRefresh}
-          />
-          {gitPanel.open ? (
-            <SplitLayout direction="vertical" initial={280} min={120}>
-              {gitDock}
-              {editor}
+        <div className="workspace-sidebar">
+          <div className="workspace-sidebar-head">
+            <span className="workspace-sidebar-title">Çalışma Alanı</span>
+            <button
+              type="button"
+              className={`btn btn-ghost sidebar-git-toggle ${gitPanel.open ? 'is-on' : ''}`}
+              title="Git paneli"
+              aria-pressed={gitPanel.open}
+              onClick={gitPanel.onClose}
+            >
+              <Icon name="git-diff" size={13} />
+              <span>Git</span>
+              {gitPanel.overview.changes.length > 0 && (
+                <span className="toolbar-count">{gitPanel.overview.changes.length}</span>
+              )}
+            </button>
+          </div>
+          <div className="workspace-sidebar-body">
+            <SplitLayout direction="vertical" initial={320} min={120}>
+              <FileExplorer
+                rootPath={activeSession?.cwd ?? null}
+                hiddenFolders={settings.hiddenFolders}
+                gitFiles={gitStatus.files}
+                onOpenFile={onOpenFile}
+                onOpenGitDiff={onOpenGitDiff}
+                onOpenTerminalHere={onOpenTerminalHere}
+                refreshNonce={explorerNonce}
+                onRefresh={onRefresh}
+              />
+              {gitPanel.open ? (
+                <SplitLayout direction="vertical" initial={280} min={120}>
+                  {gitDock}
+                  {editor}
+                </SplitLayout>
+              ) : (
+                editor
+              )}
             </SplitLayout>
-          ) : (
-            editor
-          )}
-        </SplitLayout>
+          </div>
+        </div>
       </SplitLayout>
     </div>
   )

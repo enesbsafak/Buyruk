@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from './Icon'
 import { basename } from '../utils/pathUtils'
+import { buildSelectedGitPaths, toggleDeselectedGitPath } from '../utils/gitSelection'
 import type { GitBranches, GitChange, GitCommit, GitOverview } from '../types'
 
 interface GitPanelProps {
@@ -136,28 +137,14 @@ export function GitPanel({
 }: GitPanelProps) {
   const [tab, setTab] = useState<GitTab>('changes')
   const [message, setMessage] = useState('')
-  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [deselectedPaths, setDeselectedPaths] = useState<Set<string>>(new Set())
   const [committing, setCommitting] = useState(false)
 
-  // Default every changed file to "included" whenever the change set changes
-  // (also runs after a commit, since the list shrinks).
-  const changeKey = overview.changes.map((c) => c.absolutePath).join('|')
-  useEffect(() => {
-    setSelected(new Set(overview.changes.map((c) => c.absolutePath)))
-  }, [changeKey])
-
   const toggle = (absolutePath: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(absolutePath)) next.delete(absolutePath)
-      else next.add(absolutePath)
-      return next
-    })
+    setDeselectedPaths((prev) => toggleDeselectedGitPath(prev, absolutePath))
   }
 
-  const selectedPaths = overview.changes
-    .filter((c) => selected.has(c.absolutePath))
-    .map((c) => c.absolutePath)
+  const selectedPaths = buildSelectedGitPaths(overview.changes, deselectedPaths)
   const canCommit = message.trim().length > 0 && selectedPaths.length > 0 && !committing
 
   const handleCommit = async () => {
@@ -261,6 +248,7 @@ export function GitPanel({
           <div className="git-commit-box">
             <textarea
               className="git-commit-input"
+              aria-label="Commit mesajı"
               placeholder="Commit mesajı…"
               rows={2}
               value={message}
@@ -293,9 +281,10 @@ export function GitPanel({
                   <input
                     type="checkbox"
                     className="git-check"
-                    checked={selected.has(change.absolutePath)}
+                    checked={!deselectedPaths.has(change.absolutePath)}
                     onChange={() => toggle(change.absolutePath)}
                     title="Commit'e dahil et"
+                    aria-label={`${change.path} commit'e dahil et`}
                   />
                   <span className={`git-badge ${kind.cls}`}>{kind.label}</span>
                   <button

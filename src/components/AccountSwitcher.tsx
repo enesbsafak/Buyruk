@@ -36,7 +36,7 @@ export function AccountSwitcher({
 
   const type = activeSession.type
   const list = accounts.accountsByType(type)
-  const current = accounts.accountById(activeSession.accountId)
+  const current = accounts.accountByIdOfType(activeSession.accountId, type)
 
   return (
     <div className="dropdown no-drag account-switcher" ref={ref}>

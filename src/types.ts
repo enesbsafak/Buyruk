@@ -93,6 +93,7 @@ export interface GitStatus {
 
 export interface GitChange {
   path: string
+  oldPath?: string
   absolutePath: string
   status: string
   staged: boolean

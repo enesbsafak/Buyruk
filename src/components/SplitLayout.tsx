@@ -59,6 +59,7 @@ export function SplitLayout({
     return () => {
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', stopDrag)
+      stopDrag()
     }
   }, [])
 

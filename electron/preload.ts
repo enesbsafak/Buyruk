@@ -70,9 +70,10 @@ const api = {
     ipcRenderer.invoke(IPC.GIT_COMMIT_DIFF, root, hash),
   gitFileSides: (
     root: string,
-    filePath: string
+    filePath: string,
+    oldPath?: string
   ): Promise<{ original: string; modified: string; binary: boolean }> =>
-    ipcRenderer.invoke(IPC.GIT_FILE_SIDES, root, filePath),
+    ipcRenderer.invoke(IPC.GIT_FILE_SIDES, root, filePath, oldPath),
   gitFetch: (root: string): Promise<GitOverview> => ipcRenderer.invoke(IPC.GIT_FETCH, root),
   gitCommit: (root: string, message: string, paths: string[]): Promise<GitOverview> =>
     ipcRenderer.invoke(IPC.GIT_COMMIT, root, message, paths),
