@@ -1,5 +1,25 @@
 export type TerminalType = 'cmd' | 'powershell' | 'claude' | 'codex' | 'opencode'
 
+// CLI types that support linking multiple accounts.
+export type CliKind = 'claude' | 'codex' | 'opencode'
+
+export interface CliAccount {
+  id: string
+  type: CliKind
+  label: string
+  createdAt: number
+  lastUsedAt: number
+}
+
+export interface AccountsState {
+  accounts: CliAccount[]
+  activeByType: Partial<Record<CliKind, string>>
+}
+
+export function isCliKind(type: TerminalType): type is CliKind {
+  return type === 'claude' || type === 'codex' || type === 'opencode'
+}
+
 export interface TerminalSession {
   id: string
   type: TerminalType
@@ -7,6 +27,7 @@ export interface TerminalSession {
   cwd: string
   createdAt: number
   isActive: boolean
+  accountId?: string
 }
 
 export interface CreateTerminalOptions {
@@ -15,6 +36,7 @@ export interface CreateTerminalOptions {
   command: string
   cols?: number
   rows?: number
+  accountId?: string
 }
 
 export interface FileNode {
@@ -33,11 +55,27 @@ export interface OpenFile {
   isImage: boolean
   readOnly?: boolean
   dataUrl?: string
+  // When set, this tab is a read-only side-by-side diff: diffOriginal is the
+  // left (HEAD) side and `content` is the right (working tree) side.
+  diffOriginal?: string
+}
+
+export interface GitBranches {
+  current: string
+  branches: string[]
+}
+
+export interface GitFileSides {
+  original: string
+  modified: string
+  binary: boolean
 }
 
 export type TerminalStatus = 'running' | 'exited'
 
 // A live session in the renderer: the base session data plus UI/runtime state.
+// accountId (inherited from TerminalSession) records which linked account, if
+// any, this AI CLI session is running under.
 export interface SessionRuntime extends TerminalSession {
   status: TerminalStatus
   exitCode?: number

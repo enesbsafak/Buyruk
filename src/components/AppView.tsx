@@ -4,13 +4,16 @@ import { StatusBar } from './StatusBar'
 import { WorkspacePanels } from './WorkspacePanels'
 import { WelcomeScreen } from './WelcomeScreen'
 import { AppOverlays } from './AppOverlays'
-import { GitPanel } from './GitPanel'
 import type { Command } from './CommandPalette'
 import type { OrchestratorConfig } from '../orchestrator'
 import type { RecentFolder } from '../utils/persistence'
+import type { UseAccounts } from '../hooks/useAccounts'
 import type { AppUpdateStatus } from '../updateTypes'
 import type {
   AiLimitsOverview,
+  CliKind,
+  GitChange,
+  GitCommit,
   GitOverview,
   GitStatus,
   SessionRuntime,
@@ -48,6 +51,13 @@ interface AppViewProps {
   handleOpenFile: (path: string) => void
   handleOpenFolder: () => void
   handleOpenGitDiff: (path: string) => void
+  handleOpenCommitDiff: (commit: GitCommit) => void
+  handleOpenFileDiff: (change: GitChange) => void
+  handleGitCommit: (message: string, paths: string[]) => Promise<boolean>
+  handleGitPush: () => void
+  handleGitPull: () => void
+  handleCheckoutBranch: (name: string) => void
+  handleCreateBranch: () => void
   handleOpenRecent: (recent: RecentFolder) => void
   handleCloneRepo: () => void
   handleOpenTerminalHere: (cwd: string, type: TerminalType) => void
@@ -56,6 +66,9 @@ interface AppViewProps {
   handleRefreshAiLimits: () => void
   handleRefreshGit: () => void
   handleRestart: (session: SessionRuntime) => void
+  handleSwitchAccount: (session: SessionRuntime, accountId: string) => void
+  handleAddAccount: (type: CliKind) => void
+  accounts: UseAccounts
   handleSaveOrchestrator: (config: OrchestratorConfig) => void
   handleSaveSettings: (settings: Settings) => void
   handleSelectFile: (path: string) => void
@@ -109,6 +122,13 @@ export function AppView({
   handleOpenFile,
   handleOpenFolder,
   handleOpenGitDiff,
+  handleOpenCommitDiff,
+  handleOpenFileDiff,
+  handleGitCommit,
+  handleGitPush,
+  handleGitPull,
+  handleCheckoutBranch,
+  handleCreateBranch,
   handleOpenRecent,
   handleCloneRepo,
   handleOpenTerminalHere,
@@ -117,6 +137,9 @@ export function AppView({
   handleRefreshAiLimits,
   handleRefreshGit,
   handleRestart,
+  handleSwitchAccount,
+  handleAddAccount,
+  accounts,
   handleSaveOrchestrator,
   handleSaveSettings,
   handleSelectFile,
@@ -139,21 +162,37 @@ export function AppView({
   setActiveSession,
   bumpExplorer
 }: AppViewProps) {
-  const gitPopover = useMemo(
-    () => (
-      <GitPanel
-        overview={gitOverview}
-        popover
-        onRefresh={handleRefreshGit}
-        onFetch={handleFetchGit}
-        onOpenDiff={(path) => {
-          handleOpenGitDiff(path)
-          toggleGitPanel()
-        }}
-        onClose={toggleGitPanel}
-      />
-    ),
-    [gitOverview, handleFetchGit, handleOpenGitDiff, handleRefreshGit, toggleGitPanel]
+  const gitPanel = useMemo(
+    () => ({
+      open: gitPanelOpen,
+      overview: gitOverview,
+      root: activeSession?.cwd ?? null,
+      onClose: toggleGitPanel,
+      onRefresh: handleRefreshGit,
+      onFetch: handleFetchGit,
+      onPush: handleGitPush,
+      onPull: handleGitPull,
+      onCommit: handleGitCommit,
+      onCheckoutBranch: handleCheckoutBranch,
+      onCreateBranch: handleCreateBranch,
+      onOpenFileDiff: handleOpenFileDiff,
+      onOpenCommitDiff: handleOpenCommitDiff
+    }),
+    [
+      gitPanelOpen,
+      gitOverview,
+      activeSession?.cwd,
+      toggleGitPanel,
+      handleRefreshGit,
+      handleFetchGit,
+      handleGitPush,
+      handleGitPull,
+      handleGitCommit,
+      handleCheckoutBranch,
+      handleCreateBranch,
+      handleOpenFileDiff,
+      handleOpenCommitDiff
+    ]
   )
 
   return (
@@ -173,8 +212,11 @@ export function AppView({
         gitChangeCount={gitOverview.changes.length}
         gitPanelOpen={gitPanelOpen}
         onToggleGitPanel={toggleGitPanel}
-        gitPopover={gitPopover}
         orchestratorEnabled={orchestratorConfig.enabled}
+        activeSession={activeSession}
+        accounts={accounts}
+        onSwitchAccount={handleSwitchAccount}
+        onAddAccount={handleAddAccount}
       />
 
       {sessions.length === 0 ? (
@@ -208,6 +250,7 @@ export function AppView({
           onSelectFile={handleSelectFile}
           onCloseFile={handleCloseFile}
           onOpenGitDiff={handleOpenGitDiff}
+          gitPanel={gitPanel}
         />
       )}
 
@@ -234,6 +277,8 @@ export function AppView({
         settingsOpen={settingsOpen}
         settings={settings}
         orchestratorConfig={orchestratorConfig}
+        accounts={accounts}
+        onAddAccount={handleAddAccount}
         onPickFile={handleOpenFile}
         onCloseQuickOpen={closeQuickOpen}
         onClosePalette={closePalette}

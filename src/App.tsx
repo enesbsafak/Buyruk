@@ -5,10 +5,12 @@ import { useDialog } from './components/DialogProvider'
 import { useSessions } from './hooks/useSessions'
 import { useSettings } from './hooks/useSettings'
 import { useOrchestrator } from './hooks/useOrchestrator'
+import { useAccounts, type UseAccounts } from './hooks/useAccounts'
 import { terminalBus } from './terminalBus'
 import { describeOrchestratorConfig } from './orchestrator'
 import { getLanguage, isImageFile } from './utils/language'
 import { basename, joinPath } from './utils/pathUtils'
+import { sessionTitle } from './utils/sessionTitle'
 import {
   loadRecents,
   loadSavedSessions,
@@ -17,13 +19,17 @@ import {
   type RecentFolder
 } from './utils/persistence'
 import { INITIAL_UPDATE_STATUS, type AppUpdateStatus } from './updateTypes'
-import type {
-  AiLimitsOverview,
-  GitOverview,
-  GitStatus,
-  SessionRuntime,
-  Settings,
-  TerminalType
+import {
+  isCliKind,
+  type AiLimitsOverview,
+  type CliKind,
+  type GitChange,
+  type GitCommit,
+  type GitOverview,
+  type GitStatus,
+  type SessionRuntime,
+  type Settings,
+  type TerminalType
 } from './types'
 
 const EMPTY_GIT: GitStatus = { isRepo: false, branch: '', files: {} }
@@ -349,6 +355,7 @@ interface TerminalControllerOptions {
   activeId: string | null
   activeSessionRef: { current: SessionRuntime | null }
   actions: ReturnType<typeof useSessions>['actions']
+  accounts: UseAccounts
   broadcast: boolean
   dialog: ReturnType<typeof useDialog>
   sessionsRef: { current: SessionRuntime[] }
@@ -356,10 +363,14 @@ interface TerminalControllerOptions {
   dispatchUi: (action: UiAction) => void
 }
 
+const ADD_ACCOUNT_ID = '__add-account__'
+const NO_ACCOUNT_ID = '__no-account__'
+
 function useTerminalController({
   activeId,
   activeSessionRef,
   actions,
+  accounts,
   broadcast,
   dialog,
   sessionsRef,
@@ -416,14 +427,19 @@ function useTerminalController({
   }, [actions])
 
   const spawnTerminal = useCallback(
-    async (type: TerminalType, cwd: string) => {
+    async (type: TerminalType, cwd: string, accountId?: string) => {
+      // For AI CLIs, fall back to the type's default linked account when the
+      // caller didn't pick one (e.g. opening a recent folder).
+      const resolvedAccountId =
+        accountId ?? (isCliKind(type) ? accounts.resolveDefault(type)?.id : undefined)
       try {
         const session = await window.api.createTerminal({
           type,
           cwd,
           command: commandFor(type, settings),
           cols: 80,
-          rows: 24
+          rows: 24,
+          accountId: resolvedAccountId
         })
         actions.add(session)
         dispatchUi({ type: 'set-status-message', message: `Açıldı: ${session.title}` })
@@ -432,17 +448,127 @@ function useTerminalController({
         dialog.notify(`Terminal açılamadı: ${errMsg(err)}`, 'error')
       }
     },
-    [actions, settings, dialog, dispatchUi]
+    [actions, accounts, settings, dialog, dispatchUi]
+  )
+
+  // Link a brand-new account of `type`, then open a session under it so the user
+  // can complete the CLI's browser login (its credentials land in the account's
+  // isolated config dir). cwd defaults to the project dir, else we ask for one.
+  const addAccountFlow = useCallback(
+    async (type: CliKind) => {
+      const label = await dialog.prompt({
+        title: 'Hesap Bağla',
+        label: `${commandFor(type, settings)} için yeni hesap`,
+        placeholder: 'Örn. İş hesabı',
+        confirmText: 'Bağla'
+      })
+      if (!label) return
+      const account = await accounts.add(type, label)
+      if (!account) {
+        dialog.notify('Hesap oluşturulamadı', 'error')
+        return
+      }
+      await accounts.setActive(type, account.id)
+      const cwd =
+        settings.defaultProjectDir ||
+        (await window.api.selectFolder(settings.defaultProjectDir || undefined))
+      if (!cwd) return
+      await spawnTerminal(type, cwd, account.id)
+      dialog.notify(`"${label}" için terminalde giriş yapın (/login)`, 'info')
+    },
+    [accounts, dialog, settings, spawnTerminal]
+  )
+
+  // Before picking a project folder, ask which linked account the new AI session
+  // should use. Returns the chosen accountId, or null to abort the whole action.
+  const pickAccountForNew = useCallback(
+    async (type: CliKind): Promise<string | null | undefined> => {
+      const list = accounts.accountsByType(type)
+      if (list.length === 0) {
+        const link = await dialog.confirm({
+          title: 'Bağlı hesap yok',
+          message: `Bu CLI için bağlı hesap yok. Şimdi bir hesap bağlamak ister misin?`,
+          confirmText: 'Hesap Bağla'
+        })
+        if (link) {
+          await addAccountFlow(type)
+          return null // addAccountFlow already opened the session
+        }
+        return undefined // proceed without an account
+      }
+
+      const defaultId = accounts.resolveDefault(type)?.id
+      const choice = await dialog.choose({
+        title: 'Hesap Seç',
+        message: 'Bu oturum hangi hesapla açılsın?',
+        options: [
+          ...list.map((a) => ({
+            id: a.id,
+            label: a.label,
+            hint: a.id === defaultId ? 'varsayılan' : undefined,
+            selected: a.id === defaultId
+          })),
+          { id: ADD_ACCOUNT_ID, label: '+ Yeni hesap bağla' },
+          { id: NO_ACCOUNT_ID, label: 'Hesapsız devam et' }
+        ]
+      })
+      if (choice === null) return null
+      if (choice === ADD_ACCOUNT_ID) {
+        await addAccountFlow(type)
+        return null
+      }
+      if (choice === NO_ACCOUNT_ID) return undefined
+      await accounts.setActive(type, choice)
+      return choice
+    },
+    [accounts, dialog, addAccountFlow]
   )
 
   const handleNewTerminal = useCallback(
     async (type: TerminalType) => {
+      let accountId: string | undefined
+      if (isCliKind(type)) {
+        const picked = await pickAccountForNew(type)
+        if (picked === null) return // aborted or handled by addAccountFlow
+        accountId = picked
+      }
       const cwd = await window.api.selectFolder(settings.defaultProjectDir || undefined)
       if (!cwd) return
-      await spawnTerminal(type, cwd)
+      await spawnTerminal(type, cwd, accountId)
     },
-    [spawnTerminal, settings.defaultProjectDir]
+    [pickAccountForNew, spawnTerminal, settings.defaultProjectDir]
   )
+
+  // Switch the account of a live AI session: rebind its env and restart in place.
+  const handleSwitchAccount = useCallback(
+    async (session: SessionRuntime, accountId: string) => {
+      if (!isCliKind(session.type) || session.accountId === accountId) return
+      const label = accounts.accountById(accountId)?.label
+      actions.setAccount(session.id, accountId)
+      // Reflect the new account in the tab title (matches the create/restore format).
+      actions.rename(session.id, sessionTitle(session.type, session.cwd, label))
+      await accounts.setActive(session.type, accountId)
+      terminalBus.clear(session.id)
+      actions.restart(session.id)
+      try {
+        await window.api.restartTerminal({
+          id: session.id,
+          type: session.type,
+          cwd: session.cwd,
+          command: commandFor(session.type, settings),
+          cols: 80,
+          rows: 24,
+          accountId
+        })
+        dispatchUi({ type: 'set-status-message', message: `Hesap değişti: ${label ?? 'hesap'}` })
+      } catch (err) {
+        dialog.notify(`Hesap değiştirilemedi: ${errMsg(err)}`, 'error')
+      }
+    },
+    [actions, accounts, settings, dialog, dispatchUi]
+  )
+
+  const handleAddAccount = useCallback((type: CliKind) => addAccountFlow(type), [addAccountFlow])
 
   const handleOpenRecent = useCallback(
     (recent: RecentFolder) => spawnTerminal(recent.type, recent.cwd),
@@ -489,7 +615,8 @@ function useTerminalController({
           cwd: session.cwd,
           command: commandFor(session.type, settings),
           cols: 80,
-          rows: 24
+          rows: 24,
+          accountId: session.accountId
         })
         dispatchUi({ type: 'set-status-message', message: `Yeniden başlatıldı: ${session.title}` })
       } catch (err) {
@@ -584,6 +711,8 @@ function useTerminalController({
     handleOpenRecent,
     handleCloneRepo,
     handleRestart,
+    handleSwitchAccount,
+    handleAddAccount,
     handleUpdateAiTools,
     handleOpenTerminalHere,
     handleRenameSession,
@@ -597,6 +726,7 @@ interface FileControllerOptions {
   activeSession: SessionRuntime | null
   activeSessionRef: { current: SessionRuntime | null }
   actions: ReturnType<typeof useSessions>['actions']
+  accounts: UseAccounts
   dialog: ReturnType<typeof useDialog>
   defaultProjectDir: string
   explorerNonce: number
@@ -609,6 +739,7 @@ function useFileController({
   activeSession,
   activeSessionRef,
   actions,
+  accounts,
   dialog,
   defaultProjectDir,
   explorerNonce,
@@ -695,6 +826,131 @@ function useFileController({
     }
   }, [activeSessionRef, dialog, dispatchUi])
 
+  // Apply a fresh overview returned by a git action, then re-read status (file
+  // decorations) and bump the explorer (working tree may have changed).
+  const applyGitResult = useCallback(
+    async (root: string, overview: GitOverview) => {
+      dispatchUi({ type: 'set-git-overview', gitOverview: overview })
+      try {
+        const status = await window.api.gitStatus(root)
+        dispatchUi({ type: 'set-git-status', gitStatus: status })
+      } catch {
+        // status refresh best-effort
+      }
+      bumpExplorer()
+    },
+    [dispatchUi, bumpExplorer]
+  )
+
+  const handleGitCommit = useCallback(
+    async (message: string, paths: string[]): Promise<boolean> => {
+      const root = activeSessionRef.current?.cwd
+      if (!root) return false
+      try {
+        const overview = await window.api.gitCommit(root, message, paths)
+        await applyGitResult(root, overview)
+        dispatchUi({ type: 'set-status-message', message: 'Commit oluşturuldu' })
+        dialog.notify('Commit oluşturuldu', 'success')
+        return true
+      } catch (err) {
+        dialog.notify(`Commit başarısız: ${errMsg(err)}`, 'error')
+        return false
+      }
+    },
+    [activeSessionRef, applyGitResult, dialog, dispatchUi]
+  )
+
+  const handleGitPush = useCallback(async () => {
+    const root = activeSessionRef.current?.cwd
+    if (!root) return
+    dispatchUi({ type: 'set-status-message', message: 'Push ediliyor…' })
+    try {
+      const overview = await window.api.gitPush(root)
+      await applyGitResult(root, overview)
+      dialog.notify('Push tamamlandı', 'success')
+    } catch (err) {
+      dialog.notify(`Push başarısız: ${errMsg(err)}`, 'error')
+    }
+  }, [activeSessionRef, applyGitResult, dialog, dispatchUi])
+
+  const handleGitPull = useCallback(async () => {
+    const root = activeSessionRef.current?.cwd
+    if (!root) return
+    dispatchUi({ type: 'set-status-message', message: 'Pull ediliyor…' })
+    try {
+      const overview = await window.api.gitPull(root)
+      await applyGitResult(root, overview)
+      dialog.notify('Pull tamamlandı', 'success')
+    } catch (err) {
+      dialog.notify(`Pull başarısız: ${errMsg(err)}`, 'error')
+    }
+  }, [activeSessionRef, applyGitResult, dialog, dispatchUi])
+
+  const handleCheckoutBranch = useCallback(
+    async (name: string) => {
+      const root = activeSessionRef.current?.cwd
+      if (!root) return
+      try {
+        const overview = await window.api.gitCheckout(root, name)
+        await applyGitResult(root, overview)
+        dispatchUi({ type: 'set-status-message', message: `Branch: ${name}` })
+      } catch (err) {
+        dialog.notify(`Branch değiştirilemedi: ${errMsg(err)}`, 'error')
+      }
+    },
+    [activeSessionRef, applyGitResult, dialog, dispatchUi]
+  )
+
+  const handleCreateBranch = useCallback(async () => {
+    const root = activeSessionRef.current?.cwd
+    if (!root) return
+    const name = await dialog.prompt({
+      title: 'Yeni Branch',
+      label: 'Branch adı',
+      placeholder: 'feature/yeni-ozellik',
+      confirmText: 'Oluştur'
+    })
+    if (!name) return
+    try {
+      const overview = await window.api.gitCreateBranch(root, name)
+      await applyGitResult(root, overview)
+      dispatchUi({ type: 'set-status-message', message: `Branch oluşturuldu: ${name}` })
+      dialog.notify(`Branch oluşturuldu: ${name}`, 'success')
+    } catch (err) {
+      dialog.notify(`Branch oluşturulamadı: ${errMsg(err)}`, 'error')
+    }
+  }, [activeSessionRef, applyGitResult, dialog, dispatchUi])
+
+  // Open a changed file as a read-only side-by-side diff (HEAD vs working tree).
+  const handleOpenFileDiff = useCallback(
+    async (change: GitChange) => {
+      const session = activeSessionRef.current
+      if (!session) return
+      try {
+        const sides = await window.api.gitFileSides(session.cwd, change.absolutePath)
+        if (sides.binary) {
+          dialog.notify('İkili dosya — fark gösterilemiyor.', 'info')
+          return
+        }
+        actions.openFile(session.id, {
+          path: `git-side:${change.absolutePath}`,
+          name: `${basename(change.path)} ⟷`,
+          content: sides.modified,
+          savedContent: sides.modified,
+          language: getLanguage(change.path),
+          isBinary: false,
+          isImage: false,
+          readOnly: true,
+          diffOriginal: sides.original
+        })
+        dispatchUi({ type: 'set-status-message', message: `Fark açıldı: ${basename(change.path)}` })
+      } catch (err) {
+        dialog.notify(`Fark açılamadı: ${errMsg(err)}`, 'error')
+      }
+    },
+    [activeSessionRef, actions, dialog, dispatchUi]
+  )
+
   const handleOpenFolder = useCallback(async () => {
     if (!activeSession) {
       dialog.notify('Önce bir terminal oturumu açın.', 'info')
@@ -702,10 +958,10 @@ function useFileController({
     }
     const dir = await window.api.selectFolder(defaultProjectDir || undefined)
     if (!dir) return
-    const label = activeSession.title.split(' · ')[0]
-    actions.setCwd(activeSession.id, dir, `${label} · ${basename(dir)}`)
+    const accountLabel = accounts.accountById(activeSession.accountId)?.label
+    actions.setCwd(activeSession.id, dir, sessionTitle(activeSession.type, dir, accountLabel))
     bumpExplorer()
-  }, [activeSession, actions, bumpExplorer, dialog, defaultProjectDir])
+  }, [activeSession, actions, accounts, bumpExplorer, dialog, defaultProjectDir])
 
   const handleNewFolder = useCallback(async () => {
     const parent = await window.api.createFolderDialog(defaultProjectDir || undefined)
@@ -827,6 +1083,35 @@ function useFileController({
     [activeSessionRef, actions, dialog, dispatchUi]
   )
 
+  // Open a whole commit's patch (git show) as a read-only diff tab.
+  const handleOpenCommitDiff = useCallback(
+    async (commit: GitCommit) => {
+      const session = activeSessionRef.current
+      if (!session) return
+      try {
+        const content = (await window.api.gitCommitDiff(session.cwd, commit.hash)).trimEnd()
+        if (!content) {
+          dialog.notify('Bu commit için diff bulunamadı.', 'info')
+          return
+        }
+        actions.openFile(session.id, {
+          path: `git-commit:${commit.hash}`,
+          name: `${commit.hash} · ${commit.subject}`.slice(0, 60),
+          content,
+          savedContent: content,
+          language: 'diff',
+          isBinary: false,
+          isImage: false,
+          readOnly: true
+        })
+        dispatchUi({ type: 'set-status-message', message: `Commit diff açıldı: ${commit.hash}` })
+      } catch (err) {
+        dialog.notify(`Commit diff açılamadı: ${errMsg(err)}`, 'error')
+      }
+    },
+    [activeSessionRef, actions, dialog, dispatchUi]
+  )
+
   const handleSelectFile = useCallback(
     (path: string) => {
       const session = activeSessionRef.current
@@ -848,6 +1133,13 @@ function useFileController({
     handleNewFolder,
     handleOpenFile,
     handleOpenGitDiff,
+    handleOpenCommitDiff,
+    handleOpenFileDiff,
+    handleGitCommit,
+    handleGitPush,
+    handleGitPull,
+    handleCheckoutBranch,
+    handleCreateBranch,
     saveActiveFile,
     handleChangeContent,
     handleSelectFile,
@@ -866,6 +1158,7 @@ function useAppModel() {
     reset: resetOrchestrator
   } = useOrchestrator(settings)
   const { sessions, activeId, activeSession, actions } = useSessions()
+  const accounts = useAccounts()
 
   const [ui, dispatchUi] = useReducer(uiReducer, undefined, createInitialUiState)
   const {
@@ -922,6 +1215,8 @@ function useAppModel() {
     handleOpenRecent,
     handleCloneRepo,
     handleRestart,
+    handleSwitchAccount,
+    handleAddAccount,
     handleUpdateAiTools,
     handleOpenTerminalHere,
     handleRenameSession,
@@ -932,6 +1227,7 @@ function useAppModel() {
     activeId,
     activeSessionRef,
     actions,
+    accounts,
     broadcast,
     dialog,
     sessionsRef,
@@ -944,6 +1240,13 @@ function useAppModel() {
     handleNewFolder,
     handleOpenFile,
     handleOpenGitDiff,
+    handleOpenCommitDiff,
+    handleOpenFileDiff,
+    handleGitCommit,
+    handleGitPush,
+    handleGitPull,
+    handleCheckoutBranch,
+    handleCreateBranch,
     saveActiveFile,
     handleChangeContent,
     handleSelectFile,
@@ -954,6 +1257,7 @@ function useAppModel() {
     activeSession,
     activeSessionRef,
     actions,
+    accounts,
     dialog,
     defaultProjectDir: settings.defaultProjectDir,
     explorerNonce,
@@ -1069,7 +1373,8 @@ function useAppModel() {
             cwd: s.cwd,
             command: commandFor(s.type, initialSettingsRef.current),
             cols: 80,
-            rows: 24
+            rows: 24,
+            accountId: s.accountId
           })
           if (!cancelled) addSessionRef.current(session)
         } catch {
@@ -1086,7 +1391,14 @@ function useAppModel() {
 
   useEffect(() => {
     if (!restoredRef.current) return
-    saveSessions(sessions.map((s) => ({ type: s.type, cwd: s.cwd, title: s.title })))
+    saveSessions(
+      sessions.map((s) => ({
+        type: s.type,
+        cwd: s.cwd,
+        title: s.title,
+        accountId: s.accountId
+      }))
+    )
   }, [sessions])
 
   const handleSaveSettings = useCallback(
@@ -1168,6 +1480,13 @@ function useAppModel() {
     handleOpenFile,
     handleOpenFolder,
     handleOpenGitDiff,
+    handleOpenCommitDiff,
+    handleOpenFileDiff,
+    handleGitCommit,
+    handleGitPush,
+    handleGitPull,
+    handleCheckoutBranch,
+    handleCreateBranch,
     handleOpenRecent,
     handleCloneRepo,
     handleOpenTerminalHere,
@@ -1176,6 +1495,9 @@ function useAppModel() {
     handleRefreshAiLimits,
     handleRefreshGit,
     handleRestart,
+    handleSwitchAccount,
+    handleAddAccount,
+    accounts,
     handleSaveOrchestrator,
     handleSaveSettings,
     handleSelectFile,
