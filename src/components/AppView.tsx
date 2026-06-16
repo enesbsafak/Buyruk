@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { Toolbar } from './Toolbar'
 import { StatusBar } from './StatusBar'
 import { WorkspacePanels } from './WorkspacePanels'
+import { WelcomeScreen } from './WelcomeScreen'
 import { AppOverlays } from './AppOverlays'
 import { GitPanel } from './GitPanel'
 import type { Command } from './CommandPalette'
@@ -48,6 +49,7 @@ interface AppViewProps {
   handleOpenFolder: () => void
   handleOpenGitDiff: (path: string) => void
   handleOpenRecent: (recent: RecentFolder) => void
+  handleCloneRepo: () => void
   handleOpenTerminalHere: (cwd: string, type: TerminalType) => void
   handleRenameSession: (session: SessionRuntime) => void
   handleResetOrchestrator: () => void
@@ -70,6 +72,7 @@ interface AppViewProps {
   settings: Settings
   settingsOpen: boolean
   statusMessage: string
+  toggleBroadcast: () => void
   toggleGitPanel: () => void
   updateStatus: AppUpdateStatus
   setActiveSession: (id: string) => void
@@ -107,6 +110,7 @@ export function AppView({
   handleOpenFolder,
   handleOpenGitDiff,
   handleOpenRecent,
+  handleCloneRepo,
   handleOpenTerminalHere,
   handleRenameSession,
   handleResetOrchestrator,
@@ -129,6 +133,7 @@ export function AppView({
   settings,
   settingsOpen,
   statusMessage,
+  toggleBroadcast,
   toggleGitPanel,
   updateStatus,
   setActiveSession,
@@ -157,14 +162,11 @@ export function AppView({
         onNewTerminal={handleNewTerminal}
         onOpenFolder={handleOpenFolder}
         onNewFolder={handleNewFolder}
-        onCloseActive={handleCloseActive}
+        onCloneRepo={handleCloneRepo}
         onOpenSettings={openSettings}
         onOpenOrchestrator={openOrchestrator}
-        hasActive={!!activeId}
         recents={recents}
         onOpenRecent={handleOpenRecent}
-        broadcast={broadcast}
-        onBroadcastPrompt={handleBroadcastPrompt}
         onUpdateAiTools={handleUpdateAiTools}
         aiLimits={aiLimits}
         onRefreshAiLimits={handleRefreshAiLimits}
@@ -175,29 +177,39 @@ export function AppView({
         orchestratorEnabled={orchestratorConfig.enabled}
       />
 
-      <WorkspacePanels
-        sessions={sessions}
-        activeId={activeId}
-        activeSession={activeSession}
-        settings={settings}
-        broadcast={broadcast}
-        gitStatus={gitStatus}
-        explorerNonce={explorerNonce}
-        onSelectSession={setActiveSession}
-        onCloseSession={handleCloseSession}
-        onRestart={handleRestart}
-        onRenameSession={handleRenameSession}
-        onInput={handleInput}
-        onBell={handleBell}
-        onOpenFile={handleOpenFile}
-        onOpenTerminalHere={handleOpenTerminalHere}
-        onRefresh={bumpExplorer}
-        onChangeContent={handleChangeContent}
-        onSaveFile={saveActiveFile}
-        onSelectFile={handleSelectFile}
-        onCloseFile={handleCloseFile}
-        onOpenGitDiff={handleOpenGitDiff}
-      />
+      {sessions.length === 0 ? (
+        <WelcomeScreen
+          recents={recents}
+          onNewTerminal={handleNewTerminal}
+          onCloneRepo={handleCloneRepo}
+          onOpenRecent={handleOpenRecent}
+        />
+      ) : (
+        <WorkspacePanels
+          sessions={sessions}
+          activeId={activeId}
+          activeSession={activeSession}
+          settings={settings}
+          broadcast={broadcast}
+          gitStatus={gitStatus}
+          explorerNonce={explorerNonce}
+          onSelectSession={setActiveSession}
+          onCloseSession={handleCloseSession}
+          onRestart={handleRestart}
+          onRenameSession={handleRenameSession}
+          onInput={handleInput}
+          onBell={handleBell}
+          onToggleBroadcast={toggleBroadcast}
+          onOpenFile={handleOpenFile}
+          onOpenTerminalHere={handleOpenTerminalHere}
+          onRefresh={bumpExplorer}
+          onChangeContent={handleChangeContent}
+          onSaveFile={saveActiveFile}
+          onSelectFile={handleSelectFile}
+          onCloseFile={handleCloseFile}
+          onOpenGitDiff={handleOpenGitDiff}
+        />
+      )}
 
       <StatusBar
         activeSession={activeSession}

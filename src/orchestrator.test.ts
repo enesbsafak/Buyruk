@@ -12,6 +12,7 @@ const settings: Settings = {
   claudeCommand: 'claude',
   codexCommand: 'codex',
   opencodeCommand: 'opencode',
+  defaultProjectDir: '',
   hiddenFolders: [],
   terminalFont: 'Consolas',
   terminalFontSize: 13,

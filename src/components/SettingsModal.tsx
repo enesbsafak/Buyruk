@@ -104,6 +104,32 @@ function SettingsModalContent({
         </label>
 
         <label className="field">
+          <span className="field-label">Varsayılan proje klasörü</span>
+          <div className="field-with-button">
+            <input
+              className="field-input"
+              value={draft.defaultProjectDir}
+              onChange={(e) => set('defaultProjectDir', e.target.value)}
+              placeholder="Örn. C:\Users\sen\Projeler"
+            />
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={async () => {
+                const dir = await window.api.selectFolder(draft.defaultProjectDir || undefined)
+                if (dir) set('defaultProjectDir', dir)
+              }}
+            >
+              Gözat
+            </button>
+          </div>
+          <span className="field-hint">
+            Klasör seç ve klonla pencereleri buradan açılır. Boş bırakılırsa sistem
+            varsayılanı (Belgeler) kullanılır.
+          </span>
+        </label>
+
+        <label className="field">
           <span className="field-label">Terminal fontu (Nerd Font önerilir)</span>
           <input
             className="field-input"

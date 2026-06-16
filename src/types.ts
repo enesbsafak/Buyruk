@@ -128,6 +128,7 @@ export interface Settings {
   claudeCommand: string
   codexCommand: string
   opencodeCommand: string
+  defaultProjectDir: string
   hiddenFolders: string[]
   terminalFont: string
   terminalFontSize: number

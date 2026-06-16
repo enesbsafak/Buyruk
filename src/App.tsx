@@ -231,6 +231,7 @@ interface UseCommandListOptions {
   onNewTerminal: (type: TerminalType) => void
   onOpenFolder: () => void
   onNewFolder: () => void
+  onCloneRepo: () => void
   onBroadcastPrompt: () => void
   onOpenOrchestrator: () => void
   onUpdateAiTools: () => void
@@ -248,6 +249,7 @@ function useCommandList({
   onNewTerminal,
   onOpenFolder,
   onNewFolder,
+  onCloneRepo,
   onBroadcastPrompt,
   onOpenOrchestrator,
   onUpdateAiTools,
@@ -266,6 +268,7 @@ function useCommandList({
       { id: 'new-opencode', label: 'Yeni OpenCode', icon: 'terminal', run: () => onNewTerminal('opencode') },
       { id: 'open-folder', label: 'Klasör Aç (workspace değiştir)', icon: 'folder', run: onOpenFolder },
       { id: 'new-folder', label: 'Yeni Klasör', icon: 'folder-plus', run: onNewFolder },
+      { id: 'clone-repo', label: "GitHub'dan Klonla", icon: 'download', run: onCloneRepo },
       { id: 'orchestrator', label: 'AI Orkestrasyon', icon: 'orchestrator', run: onOpenOrchestrator },
       { id: 'update-ai-tools', label: 'AI Araçlarını Güncelle', icon: 'refresh', run: onUpdateAiTools },
       { id: 'quick-open', label: 'Hızlı Dosya Aç', hint: 'Ctrl+P', icon: 'search', run: () => activeSession && dispatchUi({ type: 'set-quick-open', open: true }) },
@@ -292,6 +295,7 @@ function useCommandList({
     onNewTerminal,
     onOpenFolder,
     onNewFolder,
+    onCloneRepo,
     onBroadcastPrompt,
     onOpenOrchestrator,
     onUpdateAiTools,
@@ -433,17 +437,46 @@ function useTerminalController({
 
   const handleNewTerminal = useCallback(
     async (type: TerminalType) => {
-      const cwd = await window.api.selectFolder()
+      const cwd = await window.api.selectFolder(settings.defaultProjectDir || undefined)
       if (!cwd) return
       await spawnTerminal(type, cwd)
     },
-    [spawnTerminal]
+    [spawnTerminal, settings.defaultProjectDir]
   )
 
   const handleOpenRecent = useCallback(
     (recent: RecentFolder) => spawnTerminal(recent.type, recent.cwd),
     [spawnTerminal]
   )
+
+  const handleCloneRepo = useCallback(async () => {
+    const url = await dialog.prompt({
+      title: "GitHub'dan Klonla",
+      label: 'Depo adresi',
+      placeholder: 'https://github.com/kullanici/repo veya kullanici/repo',
+      confirmText: 'Devam'
+    })
+    if (!url) return
+
+    const parent = await window.api.selectFolder(settings.defaultProjectDir || undefined)
+    if (!parent) return
+
+    dispatchUi({ type: 'set-status-message', message: 'Klonlanıyor…' })
+    const offProgress = window.api.onGitCloneProgress((message) =>
+      dispatchUi({ type: 'set-status-message', message: `Klonlanıyor… ${message}` })
+    )
+    try {
+      const { path } = await window.api.gitClone({ url, parentDir: parent })
+      dispatchUi({ type: 'set-status-message', message: `Klonlandı: ${path}` })
+      dialog.notify('Depo indirildi', 'success')
+      await spawnTerminal('cmd', path)
+    } catch (err) {
+      dialog.notify(`Klonlama başarısız: ${errMsg(err)}`, 'error')
+      dispatchUi({ type: 'set-status-message', message: 'Klonlama başarısız' })
+    } finally {
+      offProgress()
+    }
+  }, [dialog, dispatchUi, spawnTerminal, settings.defaultProjectDir])
 
   const handleRestart = useCallback(
     async (session: SessionRuntime) => {
@@ -549,6 +582,7 @@ function useTerminalController({
     handleBroadcastPrompt,
     handleNewTerminal,
     handleOpenRecent,
+    handleCloneRepo,
     handleRestart,
     handleUpdateAiTools,
     handleOpenTerminalHere,
@@ -564,6 +598,7 @@ interface FileControllerOptions {
   activeSessionRef: { current: SessionRuntime | null }
   actions: ReturnType<typeof useSessions>['actions']
   dialog: ReturnType<typeof useDialog>
+  defaultProjectDir: string
   explorerNonce: number
   sessionsRef: { current: SessionRuntime[] }
   bumpExplorer: () => void
@@ -575,6 +610,7 @@ function useFileController({
   activeSessionRef,
   actions,
   dialog,
+  defaultProjectDir,
   explorerNonce,
   sessionsRef,
   bumpExplorer,
@@ -664,15 +700,15 @@ function useFileController({
       dialog.notify('Önce bir terminal oturumu açın.', 'info')
       return
     }
-    const dir = await window.api.selectFolder()
+    const dir = await window.api.selectFolder(defaultProjectDir || undefined)
     if (!dir) return
     const label = activeSession.title.split(' · ')[0]
     actions.setCwd(activeSession.id, dir, `${label} · ${basename(dir)}`)
     bumpExplorer()
-  }, [activeSession, actions, bumpExplorer, dialog])
+  }, [activeSession, actions, bumpExplorer, dialog, defaultProjectDir])
 
   const handleNewFolder = useCallback(async () => {
-    const parent = await window.api.createFolderDialog()
+    const parent = await window.api.createFolderDialog(defaultProjectDir || undefined)
     if (!parent) return
     const name = await dialog.prompt({
       title: 'Yeni Klasör',
@@ -689,7 +725,7 @@ function useFileController({
     } catch (err) {
       dialog.notify(`Klasör oluşturulamadı: ${errMsg(err)}`, 'error')
     }
-  }, [dialog, bumpExplorer, dispatchUi])
+  }, [dialog, bumpExplorer, dispatchUi, defaultProjectDir])
 
   const handleOpenFile = useCallback(
     async (path: string) => {
@@ -866,6 +902,7 @@ function useAppModel() {
     () => dispatchUi({ type: 'set-settings-open', open: true }),
     []
   )
+  const toggleBroadcast = useCallback(() => dispatchUi({ type: 'toggle-broadcast' }), [])
   const toggleGitPanel = useCallback(() => dispatchUi({ type: 'toggle-git-panel' }), [])
   const closeQuickOpen = useCallback(() => dispatchUi({ type: 'set-quick-open', open: false }), [])
   const closePalette = useCallback(() => dispatchUi({ type: 'set-palette-open', open: false }), [])
@@ -883,6 +920,7 @@ function useAppModel() {
     handleBroadcastPrompt,
     handleNewTerminal,
     handleOpenRecent,
+    handleCloneRepo,
     handleRestart,
     handleUpdateAiTools,
     handleOpenTerminalHere,
@@ -917,6 +955,7 @@ function useAppModel() {
     activeSessionRef,
     actions,
     dialog,
+    defaultProjectDir: settings.defaultProjectDir,
     explorerNonce,
     sessionsRef,
     bumpExplorer,
@@ -1088,6 +1127,7 @@ function useAppModel() {
     onNewTerminal: handleNewTerminal,
     onOpenFolder: handleOpenFolder,
     onNewFolder: handleNewFolder,
+    onCloneRepo: handleCloneRepo,
     onBroadcastPrompt: handleBroadcastPrompt,
     onOpenOrchestrator: openOrchestrator,
     onUpdateAiTools: handleUpdateAiTools,
@@ -1129,6 +1169,7 @@ function useAppModel() {
     handleOpenFolder,
     handleOpenGitDiff,
     handleOpenRecent,
+    handleCloneRepo,
     handleOpenTerminalHere,
     handleRenameSession,
     handleResetOrchestrator,
@@ -1151,6 +1192,7 @@ function useAppModel() {
     settings,
     settingsOpen,
     statusMessage,
+    toggleBroadcast,
     toggleGitPanel,
     updateStatus,
     setActiveSession: actions.setActive,

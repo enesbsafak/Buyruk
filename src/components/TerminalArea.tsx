@@ -15,6 +15,7 @@ interface TerminalAreaProps {
   onRename: (session: SessionRuntime) => void
   onInput: (id: string, data: string) => void
   onBell: (id: string) => void
+  onToggleBroadcast: () => void
 }
 
 export function TerminalArea({
@@ -28,7 +29,8 @@ export function TerminalArea({
   onRestart,
   onRename,
   onInput,
-  onBell
+  onBell,
+  onToggleBroadcast
 }: TerminalAreaProps) {
   const [zoomedId, setZoomedId] = useState<string | null>(null)
   const [prompt, setPrompt] = useState('')
@@ -106,7 +108,19 @@ export function TerminalArea({
       </div>
 
       <div className="prompt-bar">
-        <Icon name={broadcast ? 'broadcast' : 'terminal'} size={15} />
+        <button
+          type="button"
+          className={`icon-btn broadcast-btn ${broadcast ? 'is-on' : ''}`}
+          title={
+            broadcast
+              ? 'Broadcast açık: girdi tüm terminallere gönderiliyor'
+              : 'Broadcast: girdiyi tüm terminallere gönder'
+          }
+          aria-pressed={broadcast}
+          onClick={onToggleBroadcast}
+        >
+          <Icon name="broadcast" size={15} />
+        </button>
         <input
           aria-label={broadcast ? 'Tüm terminallere gönder' : 'Aktif terminale gönder'}
           value={prompt}

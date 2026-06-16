@@ -649,6 +649,65 @@ button {
   outline: none;
   border-color: var(--accent);
 }
+.broadcast-btn {
+  position: relative;
+  overflow: visible;
+}
+.broadcast-btn.is-on {
+  color: var(--success);
+  background: rgba(158, 206, 106, 0.14);
+}
+.broadcast-btn.is-on:hover:not(:disabled) {
+  color: var(--success);
+  background: rgba(158, 206, 106, 0.2);
+}
+/* Radiating broadcast waves while the mode is active. */
+.broadcast-btn.is-on::before,
+.broadcast-btn.is-on::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid var(--success);
+  opacity: 0;
+  pointer-events: none;
+  animation: broadcast-wave 1.8s ease-out infinite;
+}
+.broadcast-btn.is-on::after {
+  animation-delay: 0.9s;
+}
+.broadcast-btn.is-on svg {
+  animation: broadcast-pulse 1.8s ease-in-out infinite;
+}
+@keyframes broadcast-wave {
+  0% {
+    transform: scale(0.5);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+@keyframes broadcast-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .broadcast-btn.is-on::before,
+  .broadcast-btn.is-on::after,
+  .broadcast-btn.is-on svg {
+    animation: none;
+  }
+}
 .terminal-grid > div {
   min-width: 0;
   min-height: 0;
@@ -914,6 +973,206 @@ button {
   color: var(--text-muted);
   max-width: 320px;
   line-height: 1.6;
+}
+
+/* ---------- Welcome screen ---------- */
+.welcome {
+  height: 100%;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  padding: 48px 32px;
+  background: radial-gradient(
+    120% 70% at 50% 0%,
+    rgba(122, 162, 247, 0.06),
+    transparent 62%
+  );
+}
+.welcome-inner {
+  width: 100%;
+  max-width: 760px;
+  margin: auto;
+}
+.welcome-head {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 32px;
+}
+.welcome-logo {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-lg);
+  flex: 0 0 auto;
+}
+.welcome-title {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.welcome-subtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  max-width: 460px;
+}
+.welcome-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+}
+.welcome-section {
+  min-width: 0;
+}
+.welcome-section-title {
+  margin: 0 0 12px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+.welcome-action {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 12px 14px;
+  text-align: left;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.welcome-action:hover {
+  background: var(--bg-3);
+  border-color: var(--border-strong);
+}
+.welcome-action-primary {
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+}
+.welcome-action-primary:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.welcome-action-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  border-radius: var(--radius);
+  background: var(--bg-0);
+  border: 1px solid var(--border);
+  color: var(--accent);
+}
+.welcome-action-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.welcome-action-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.welcome-action-hint {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.welcome-starters {
+  margin-top: 16px;
+}
+.welcome-starters-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+.welcome-starters-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.welcome-starter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.welcome-starter:hover {
+  background: var(--bg-3);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.welcome-empty {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+.welcome-recents {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.welcome-recent {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.welcome-recent:hover {
+  background: var(--bg-2);
+  border-color: var(--border);
+  color: var(--text);
+}
+.welcome-recent-name {
+  flex: 0 0 auto;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.welcome-recent-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+@media (max-width: 680px) {
+  .welcome-columns {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ---------- Panels ---------- */
@@ -1532,6 +1791,26 @@ dialog.modal::backdrop {
 .field {
   display: block;
   margin-bottom: 15px;
+}
+.field-with-button {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.field-with-button .field-input {
+  flex: 1;
+  min-width: 0;
+}
+.field-with-button .btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.field-hint {
+  display: block;
+  margin-top: 6px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.5;
 }
 .field-label,
 .dlg-label {
