@@ -8,7 +8,7 @@ import {
 } from 'electron'
 import fs from 'node:fs/promises'
 import { watch as fsWatch, type FSWatcher } from 'node:fs'
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import path from 'node:path'
 import { IPC } from './ipcChannels'
 import type { GitChange, GitCommit, GitOverview, GitRemoteActivity } from '../src/types'
@@ -28,6 +28,29 @@ export interface FileNode {
   name: string
   path: string
   isDirectory: boolean
+}
+
+export interface GitCloneOptions {
+  url: string
+  parentDir: string
+  folderName?: string
+}
+
+// Accept full URLs (https/ssh/git) as-is and expand "owner/repo" shorthand to a
+// GitHub HTTPS URL, mirroring how VS Code's "Clone Repository" handles input.
+function normalizeRepoUrl(input: string): string {
+  const url = input.trim()
+  if (!url) return ''
+  if (/^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(url) || url.includes('@')) return url
+  if (/^[\w.-]+\/[\w.-]+$/.test(url)) return `https://github.com/${url}.git`
+  return url
+}
+
+// Derive a clean target folder name from a repo URL (strip trailing slash + .git).
+function deriveRepoName(url: string): string {
+  const cleaned = url.trim().replace(/\/+$/, '').replace(/\.git$/i, '')
+  const last = cleaned.split(/[\\/:]/).filter(Boolean).pop() ?? 'repo'
+  return last.replace(/[^A-Za-z0-9._-]/g, '') || 'repo'
 }
 
 const MAX_TEXT_SIZE = 5 * 1024 * 1024 // 5 MB
@@ -242,28 +265,28 @@ export function registerFileSystemHandlers(
   ipcMain: IpcMain,
   getWindow: () => BrowserWindow | null
 ): void {
-  ipcMain.handle(IPC.SELECT_FOLDER, async () => {
+  ipcMain.handle(IPC.SELECT_FOLDER, async (_e, defaultPath?: string) => {
     const win = getWindow()
+    const opts: OpenDialogOptions = {
+      title: 'Klasör seç',
+      properties: ['openDirectory', 'createDirectory']
+    }
+    if (defaultPath) opts.defaultPath = defaultPath
     const result = win
-      ? await dialog.showOpenDialog(win, {
-          title: 'Klasör seç',
-          properties: ['openDirectory', 'createDirectory']
-        })
-      : await dialog.showOpenDialog({
-          title: 'Klasör seç',
-          properties: ['openDirectory', 'createDirectory']
-        })
+      ? await dialog.showOpenDialog(win, opts)
+      : await dialog.showOpenDialog(opts)
     if (result.canceled || result.filePaths.length === 0) return null
     return result.filePaths[0]
   })
 
   // Pick a parent directory; the renderer then asks for a name and calls createFolder.
-  ipcMain.handle(IPC.CREATE_FOLDER_DIALOG, async () => {
+  ipcMain.handle(IPC.CREATE_FOLDER_DIALOG, async (_e, defaultPath?: string) => {
     const win = getWindow()
     const opts: OpenDialogOptions = {
       title: 'Yeni klasör için konum seç',
       properties: ['openDirectory', 'createDirectory']
     }
+    if (defaultPath) opts.defaultPath = defaultPath
     const result = win
       ? await dialog.showOpenDialog(win, opts)
       : await dialog.showOpenDialog(opts)
@@ -443,4 +466,60 @@ export function registerFileSystemHandlers(
     await execGit(['fetch', '--all', '--prune'], path.normalize(repoRoot))
     return getGitOverview(repoRoot)
   })
+
+  // Clone a repository into parentDir. git emits progress on stderr (often with
+  // carriage returns), which we stream to the renderer for a live status line.
+  ipcMain.handle(
+    IPC.GIT_CLONE,
+    async (_e, options: GitCloneOptions): Promise<{ path: string }> => {
+      const url = normalizeRepoUrl(options.url)
+      if (!url) throw new Error('Geçersiz depo adresi')
+      if (!options.parentDir) throw new Error('Hedef konum seçilmedi')
+
+      const name = options.folderName?.trim() || deriveRepoName(url)
+      const target = path.join(options.parentDir, name)
+
+      // Refuse to clone into an existing, non-empty directory.
+      let existing: string[] | null = null
+      try {
+        existing = await fs.readdir(target)
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err
+      }
+      if (existing && existing.length > 0) {
+        throw new Error(`Hedef klasör zaten dolu: ${target}`)
+      }
+
+      const win = getWindow()
+      const sendProgress = (message: string): void => {
+        if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) {
+          win.webContents.send(IPC.GIT_CLONE_PROGRESS, message)
+        }
+      }
+
+      return new Promise<{ path: string }>((resolve, reject) => {
+        const child = spawn('git', ['clone', '--progress', url, target], {
+          windowsHide: true
+        })
+        let stderr = ''
+        child.stderr.on('data', (chunk: Buffer) => {
+          const text = chunk.toString()
+          stderr += text
+          const last = text
+            .split(/[\r\n]/)
+            .map((line) => line.trim())
+            .filter(Boolean)
+            .pop()
+          if (last) sendProgress(last)
+        })
+        child.on('error', (err) =>
+          reject(new Error(`git başlatılamadı: ${err.message}`))
+        )
+        child.on('close', (code) => {
+          if (code === 0) resolve({ path: target })
+          else reject(new Error(stderr.trim() || `git clone ${code} koduyla başarısız oldu`))
+        })
+      })
+    }
+  )
 }

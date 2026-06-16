@@ -18,6 +18,7 @@ interface WorkspacePanelsProps {
   onRenameSession: (session: SessionRuntime) => void
   onInput: (id: string, data: string) => void
   onBell: (id: string) => void
+  onToggleBroadcast: () => void
   onOpenFile: (path: string) => void
   onOpenTerminalHere: (cwd: string, type: TerminalType) => void
   onRefresh: () => void
@@ -42,6 +43,7 @@ export function WorkspacePanels({
   onRenameSession,
   onInput,
   onBell,
+  onToggleBroadcast,
   onOpenFile,
   onOpenTerminalHere,
   onRefresh,
@@ -68,6 +70,7 @@ export function WorkspacePanels({
           onRename={onRenameSession}
           onInput={onInput}
           onBell={onBell}
+          onToggleBroadcast={onToggleBroadcast}
         />
 
         <SplitLayout direction="vertical" initial={320} min={120}>

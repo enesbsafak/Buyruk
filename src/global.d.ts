@@ -11,8 +11,8 @@ declare global {
   interface Window {
     api: {
       // File system
-      selectFolder(): Promise<string | null>
-      createFolderDialog(): Promise<string | null>
+      selectFolder(defaultPath?: string): Promise<string | null>
+      createFolderDialog(defaultPath?: string): Promise<string | null>
       readDir(path: string): Promise<FileNode[]>
       readFile(path: string): Promise<{ content: string; isBinary: boolean }>
       readFileBase64(path: string): Promise<string>
@@ -33,6 +33,12 @@ declare global {
       gitDiff(root: string, filePath: string): Promise<string>
       gitFetch(root: string): Promise<GitOverview>
       getAiLimits(options: { codexCommand?: string }): Promise<AiLimitsOverview>
+      gitClone(options: {
+        url: string
+        parentDir: string
+        folderName?: string
+      }): Promise<{ path: string }>
+      onGitCloneProgress(callback: (message: string) => void): () => void
 
       // Clipboard
       clipboardReadText(): string

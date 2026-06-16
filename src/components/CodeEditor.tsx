@@ -110,6 +110,17 @@ export function CodeEditor({
                   f.readOnly ? 'is-readonly' : ''
                 }`}
                 title={f.path}
+                onMouseDown={(e) => {
+                  // Prevent the middle-click autoscroll cursor.
+                  if (e.button === 1) e.preventDefault()
+                }}
+                onAuxClick={(e) => {
+                  // Middle-click (mouse wheel) closes the tab, like a browser.
+                  if (e.button === 1) {
+                    e.preventDefault()
+                    onCloseFile(f.path)
+                  }
+                }}
               >
                 <button
                   type="button"

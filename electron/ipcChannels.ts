@@ -20,6 +20,8 @@ export const IPC = {
   GIT_OVERVIEW: 'fs:gitOverview',
   GIT_DIFF: 'fs:gitDiff',
   GIT_FETCH: 'fs:gitFetch',
+  GIT_CLONE: 'fs:gitClone',
+  GIT_CLONE_PROGRESS: 'fs:gitCloneProgress',
 
   // AI tool limits
   AI_LIMITS_GET: 'aiLimits:get',

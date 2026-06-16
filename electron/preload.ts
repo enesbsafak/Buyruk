@@ -30,9 +30,10 @@ export interface TerminalSession {
 
 const api = {
   // ---- File system ----
-  selectFolder: (): Promise<string | null> => ipcRenderer.invoke(IPC.SELECT_FOLDER),
-  createFolderDialog: (): Promise<string | null> =>
-    ipcRenderer.invoke(IPC.CREATE_FOLDER_DIALOG),
+  selectFolder: (defaultPath?: string): Promise<string | null> =>
+    ipcRenderer.invoke(IPC.SELECT_FOLDER, defaultPath),
+  createFolderDialog: (defaultPath?: string): Promise<string | null> =>
+    ipcRenderer.invoke(IPC.CREATE_FOLDER_DIALOG, defaultPath),
   readDir: (p: string): Promise<FileNode[]> => ipcRenderer.invoke(IPC.READ_DIR, p),
   readFile: (p: string): Promise<{ content: string; isBinary: boolean }> =>
     ipcRenderer.invoke(IPC.READ_FILE, p),
@@ -64,6 +65,16 @@ const api = {
   gitDiff: (root: string, filePath: string): Promise<string> =>
     ipcRenderer.invoke(IPC.GIT_DIFF, root, filePath),
   gitFetch: (root: string): Promise<GitOverview> => ipcRenderer.invoke(IPC.GIT_FETCH, root),
+  gitClone: (options: {
+    url: string
+    parentDir: string
+    folderName?: string
+  }): Promise<{ path: string }> => ipcRenderer.invoke(IPC.GIT_CLONE, options),
+  onGitCloneProgress: (callback: (message: string) => void): (() => void) => {
+    const listener = (_e: unknown, message: string) => callback(message)
+    ipcRenderer.on(IPC.GIT_CLONE_PROGRESS, listener)
+    return () => ipcRenderer.removeListener(IPC.GIT_CLONE_PROGRESS, listener)
+  },
 
   // ---- AI limits ----
   getAiLimits: (options: { codexCommand?: string }): Promise<AiLimitsOverview> =>

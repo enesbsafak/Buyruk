@@ -11,14 +11,11 @@ interface ToolbarProps {
   onNewTerminal: (type: TerminalType) => void
   onOpenFolder: () => void
   onNewFolder: () => void
-  onCloseActive: () => void
+  onCloneRepo: () => void
   onOpenSettings: () => void
   onOpenOrchestrator: () => void
-  hasActive: boolean
   recents: RecentFolder[]
   onOpenRecent: (recent: RecentFolder) => void
-  broadcast: boolean
-  onBroadcastPrompt: () => void
   onUpdateAiTools: () => void
   aiLimits: AiLimitsOverview
   onRefreshAiLimits: () => void
@@ -41,14 +38,11 @@ export function Toolbar({
   onNewTerminal,
   onOpenFolder,
   onNewFolder,
-  onCloseActive,
+  onCloneRepo,
   onOpenSettings,
   onOpenOrchestrator,
-  hasActive,
   recents,
   onOpenRecent,
-  broadcast,
-  onBroadcastPrompt,
   onUpdateAiTools,
   aiLimits,
   onRefreshAiLimits,
@@ -157,6 +151,10 @@ export function Toolbar({
         <Icon name="folder-plus" />
         <span className="toolbar-label">Yeni Klasör</span>
       </button>
+      <button type="button" className="btn btn-ghost toolbar-action no-drag" title="GitHub'dan Klonla" onClick={onCloneRepo}>
+        <Icon name="download" />
+        <span className="toolbar-label">Klonla</span>
+      </button>
       <div className="toolbar-popover-wrap no-drag" ref={gitRef}>
         <button
           type="button"
@@ -171,10 +169,6 @@ export function Toolbar({
         </button>
         {gitPanelOpen && <div className="toolbar-popover git-popover">{gitPopover}</div>}
       </div>
-      <button type="button" className="btn btn-ghost toolbar-action no-drag" title="Terminali Kapat" onClick={onCloseActive} disabled={!hasActive}>
-        <Icon name="close" />
-        <span className="toolbar-label">Terminali Kapat</span>
-      </button>
 
       <div className="toolbar-spacer" />
 
@@ -204,14 +198,6 @@ export function Toolbar({
           </div>
         )}
       </div>
-      <button
-        type="button"
-        className={`icon-btn no-drag ${broadcast ? 'is-on' : ''}`}
-        title={broadcast ? 'Broadcast modu açık: mesaj gönder' : 'Broadcast gönder'}
-        onClick={onBroadcastPrompt}
-      >
-        <Icon name="broadcast" size={17} />
-      </button>
       <button
         type="button"
         className={`icon-btn no-drag ${orchestratorEnabled ? 'is-on' : ''}`}

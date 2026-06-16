@@ -27,6 +27,7 @@ export type IconName =
   | 'broadcast'
   | 'orchestrator'
   | 'git-diff'
+  | 'download'
   | 'win-minimize'
   | 'win-maximize'
   | 'win-restore'
@@ -126,6 +127,12 @@ const PATHS: Record<IconName, JSX.Element> = {
       <path d="M8 6h8M8 18h8M12 8.5v7" />
       <path d="m9.5 13 2.5 2.5 2.5-2.5" />
       <path d="M4 6h1.5M18.5 6H20M4 18h1.5M18.5 18H20" />
+    </>
+  ),
+  download: (
+    <>
+      <path d="M12 4v10M8 10.5l4 4 4-4" />
+      <path d="M5 18.5h14" />
     </>
   ),
   'win-minimize': <path d="M5 12h14" />,
