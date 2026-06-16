@@ -27,6 +27,32 @@ const EDITOR_OPTIONS: MonacoEditor.IStandaloneEditorConstructionOptions = {
   tabSize: 2
 }
 
+// Whole-line backgrounds for a unified git diff opened in the plain editor:
+// added (+) lines green, removed (-) lines red, hunk (@@) headers blue. Monaco's
+// `diff` token theme only colors text, so we paint full-width lines via
+// decorations to make the diff easy to scan.
+function buildDiffDecorations(
+  monaco: Parameters<OnMount>[1],
+  content: string
+): MonacoEditor.IModelDeltaDecoration[] {
+  const decorations: MonacoEditor.IModelDeltaDecoration[] = []
+  const lines = content.split('\n')
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    let className = ''
+    if (line.startsWith('+') && !line.startsWith('+++')) className = 'diff-line-add'
+    else if (line.startsWith('-') && !line.startsWith('---')) className = 'diff-line-del'
+    else if (line.startsWith('@@')) className = 'diff-line-hunk'
+    if (!className) continue
+    const ln = i + 1
+    decorations.push({
+      range: new monaco.Range(ln, 1, ln, 1),
+      options: { isWholeLine: true, className, marginClassName: className }
+    })
+  }
+  return decorations
+}
+
 const Editor = lazy(async () => {
   await configureMonaco()
   const mod = await import('@monaco-editor/react')
@@ -64,15 +90,40 @@ export function CodeEditor({
   }, [onSave])
 
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
+  const monacoRef = useRef<Parameters<OnMount>[1] | null>(null)
+  const diffDecorationsRef = useRef<MonacoEditor.IEditorDecorationsCollection | null>(null)
   const [diff, setDiff] = useState(false)
 
   const handleMount: OnMount = (editor, monaco) => {
     editorRef.current = editor
+    monacoRef.current = monaco
+    // A fresh editor instance has no decorations collection yet; drop the stale
+    // one so the diff effect re-creates it against this editor.
+    diffDecorationsRef.current = null
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => saveRef.current())
   }
 
   const formatActive = () =>
     editorRef.current?.getAction('editor.action.formatDocument')?.run()
+
+  // Paint git-diff line backgrounds whenever the visible diff file/content changes.
+  const diffFile = session?.openFiles.find((f) => f.path === session.activeFilePath) ?? null
+  const diffContent =
+    diffFile && !diffFile.isBinary && !diffFile.isImage && diffFile.language === 'diff'
+      ? diffFile.content
+      : null
+  useEffect(() => {
+    const editor = editorRef.current
+    const monaco = monacoRef.current
+    if (!editor || !monaco) return
+    try {
+      const decorations = diffContent != null ? buildDiffDecorations(monaco, diffContent) : []
+      if (diffDecorationsRef.current) diffDecorationsRef.current.set(decorations)
+      else diffDecorationsRef.current = editor.createDecorationsCollection(decorations)
+    } catch {
+      // The editor can be disposed mid model-swap; decorations re-apply on remount.
+    }
+  }, [diffContent, diffFile?.path])
 
   if (!session) {
     return (
@@ -92,8 +143,11 @@ export function CodeEditor({
 
   const files = session.openFiles
   const active = files.find((f) => f.path === session.activeFilePath) ?? null
-  const textFile = !!active && !active.isBinary && !active.isImage
-  const editable = !!active && !active.isBinary && !active.isImage && !active.readOnly
+  // A side-by-side git diff tab carries the HEAD side in diffOriginal.
+  const sideDiff = !!active && active.diffOriginal !== undefined
+  const textFile = !!active && !active.isBinary && !active.isImage && !sideDiff
+  const editable =
+    !!active && !active.isBinary && !active.isImage && !active.readOnly && !sideDiff
   const showSavedDiff = editable && diff
   const isDirty = editable && active.content !== active.savedContent
 
@@ -202,6 +256,20 @@ export function CodeEditor({
             </div>
             <div className="placeholder-text">Bu dosya metin olarak açılamıyor.</div>
           </div>
+        )}
+
+        {sideDiff && (
+          <Suspense fallback={<EditorFallback />}>
+            <DiffEditor
+              key={active!.path}
+              height="100%"
+              theme={theme}
+              original={active!.diffOriginal}
+              modified={active!.content}
+              language={active!.language}
+              options={{ ...EDITOR_OPTIONS, readOnly: true, renderSideBySide: true }}
+            />
+          </Suspense>
         )}
 
         {showSavedDiff && (

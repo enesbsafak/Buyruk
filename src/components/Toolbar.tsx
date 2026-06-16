@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Icon } from './Icon'
 import { CliIcon } from './CliIcon'
 import { AiLimitsPopover } from './AiLimitsPopover'
+import { AccountSwitcher } from './AccountSwitcher'
 import { basename } from '../utils/pathUtils'
-import brandLogo from '../assets/icon.png'
+import type { UseAccounts } from '../hooks/useAccounts'
 import type { RecentFolder } from '../utils/persistence'
-import type { AiLimitsOverview, TerminalType } from '../types'
+import type { AiLimitsOverview, CliKind, SessionRuntime, TerminalType } from '../types'
+import brandLogo from '../assets/icon.png'
 
 interface ToolbarProps {
   onNewTerminal: (type: TerminalType) => void
@@ -22,8 +24,11 @@ interface ToolbarProps {
   gitChangeCount: number
   gitPanelOpen: boolean
   onToggleGitPanel: () => void
-  gitPopover: ReactNode
   orchestratorEnabled: boolean
+  activeSession: SessionRuntime | null
+  accounts: UseAccounts
+  onSwitchAccount: (session: SessionRuntime, accountId: string) => void
+  onAddAccount: (type: CliKind) => void
 }
 
 const NEW_BUTTONS: { type: TerminalType; label: string }[] = [
@@ -49,14 +54,16 @@ export function Toolbar({
   gitChangeCount,
   gitPanelOpen,
   onToggleGitPanel,
-  gitPopover,
-  orchestratorEnabled
+  orchestratorEnabled,
+  activeSession,
+  accounts,
+  onSwitchAccount,
+  onAddAccount
 }: ToolbarProps) {
   const [maximized, setMaximized] = useState(false)
   const [recentsOpen, setRecentsOpen] = useState(false)
   const [limitsOpen, setLimitsOpen] = useState(false)
   const recentsRef = useRef<HTMLDivElement>(null)
-  const gitRef = useRef<HTMLDivElement>(null)
   const limitsRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => window.api.windowControls.onMaximizedChange(setMaximized), [])
@@ -70,15 +77,6 @@ export function Toolbar({
     window.addEventListener('mousedown', onDown)
     return () => window.removeEventListener('mousedown', onDown)
   }, [recentsOpen])
-
-  useEffect(() => {
-    if (!gitPanelOpen) return
-    const onDown = (e: MouseEvent) => {
-      if (!gitRef.current?.contains(e.target as Node)) onToggleGitPanel()
-    }
-    window.addEventListener('mousedown', onDown)
-    return () => window.removeEventListener('mousedown', onDown)
-  }, [gitPanelOpen, onToggleGitPanel])
 
   useEffect(() => {
     if (!limitsOpen) return
@@ -155,20 +153,24 @@ export function Toolbar({
         <Icon name="download" />
         <span className="toolbar-label">Klonla</span>
       </button>
-      <div className="toolbar-popover-wrap no-drag" ref={gitRef}>
-        <button
-          type="button"
-          className={`btn btn-ghost toolbar-action toolbar-git ${gitPanelOpen ? 'is-on' : ''}`}
-          title="Git paneli"
-          aria-expanded={gitPanelOpen}
-          onClick={onToggleGitPanel}
-        >
-          <Icon name="git-diff" />
-          <span className="toolbar-label">Git</span>
-          {gitChangeCount > 0 && <span className="toolbar-count">{gitChangeCount}</span>}
-        </button>
-        {gitPanelOpen && <div className="toolbar-popover git-popover">{gitPopover}</div>}
-      </div>
+      <button
+        type="button"
+        className={`btn btn-ghost toolbar-action toolbar-git no-drag ${gitPanelOpen ? 'is-on' : ''}`}
+        title="Git paneli"
+        aria-pressed={gitPanelOpen}
+        onClick={onToggleGitPanel}
+      >
+        <Icon name="git-diff" />
+        <span className="toolbar-label">Git</span>
+        {gitChangeCount > 0 && <span className="toolbar-count">{gitChangeCount}</span>}
+      </button>
+
+      <AccountSwitcher
+        activeSession={activeSession}
+        accounts={accounts}
+        onSwitchAccount={onSwitchAccount}
+        onAddAccount={onAddAccount}
+      />
 
       <div className="toolbar-spacer" />
 

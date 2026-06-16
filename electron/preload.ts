@@ -1,7 +1,7 @@
 import { clipboard, contextBridge, ipcRenderer } from 'electron'
 import { IPC } from './ipcChannels'
 import type { AppUpdateStatus } from '../src/updateTypes'
-import type { AiLimitsOverview, GitOverview } from '../src/types'
+import type { AccountsState, AiLimitsOverview, CliKind, GitOverview } from '../src/types'
 
 export interface FileNode {
   name: string
@@ -17,6 +17,7 @@ export interface CreateTerminalOptions {
   command: string
   cols?: number
   rows?: number
+  accountId?: string
 }
 
 export interface TerminalSession {
@@ -26,6 +27,7 @@ export interface TerminalSession {
   cwd: string
   createdAt: number
   isActive: boolean
+  accountId?: string
 }
 
 const api = {
@@ -64,7 +66,24 @@ const api = {
     ipcRenderer.invoke(IPC.GIT_OVERVIEW, root),
   gitDiff: (root: string, filePath: string): Promise<string> =>
     ipcRenderer.invoke(IPC.GIT_DIFF, root, filePath),
+  gitCommitDiff: (root: string, hash: string): Promise<string> =>
+    ipcRenderer.invoke(IPC.GIT_COMMIT_DIFF, root, hash),
+  gitFileSides: (
+    root: string,
+    filePath: string
+  ): Promise<{ original: string; modified: string; binary: boolean }> =>
+    ipcRenderer.invoke(IPC.GIT_FILE_SIDES, root, filePath),
   gitFetch: (root: string): Promise<GitOverview> => ipcRenderer.invoke(IPC.GIT_FETCH, root),
+  gitCommit: (root: string, message: string, paths: string[]): Promise<GitOverview> =>
+    ipcRenderer.invoke(IPC.GIT_COMMIT, root, message, paths),
+  gitPush: (root: string): Promise<GitOverview> => ipcRenderer.invoke(IPC.GIT_PUSH, root),
+  gitPull: (root: string): Promise<GitOverview> => ipcRenderer.invoke(IPC.GIT_PULL, root),
+  gitBranches: (root: string): Promise<{ current: string; branches: string[] }> =>
+    ipcRenderer.invoke(IPC.GIT_BRANCHES, root),
+  gitCheckout: (root: string, name: string): Promise<GitOverview> =>
+    ipcRenderer.invoke(IPC.GIT_CHECKOUT, root, name),
+  gitCreateBranch: (root: string, name: string): Promise<GitOverview> =>
+    ipcRenderer.invoke(IPC.GIT_CREATE_BRANCH, root, name),
   gitClone: (options: {
     url: string
     parentDir: string
@@ -79,6 +98,19 @@ const api = {
   // ---- AI limits ----
   getAiLimits: (options: { codexCommand?: string }): Promise<AiLimitsOverview> =>
     ipcRenderer.invoke(IPC.AI_LIMITS_GET, options),
+
+  // ---- CLI accounts (multi-account linking) ----
+  accounts: {
+    list: (): Promise<AccountsState> => ipcRenderer.invoke(IPC.ACCOUNTS_LIST),
+    add: (input: { type: CliKind; label: string }): Promise<AccountsState> =>
+      ipcRenderer.invoke(IPC.ACCOUNTS_ADD, input),
+    remove: (id: string): Promise<AccountsState> =>
+      ipcRenderer.invoke(IPC.ACCOUNTS_REMOVE, id),
+    rename: (id: string, label: string): Promise<AccountsState> =>
+      ipcRenderer.invoke(IPC.ACCOUNTS_RENAME, id, label),
+    setActive: (type: CliKind, id: string): Promise<AccountsState> =>
+      ipcRenderer.invoke(IPC.ACCOUNTS_SET_ACTIVE, type, id)
+  },
 
   // ---- Clipboard ----
   clipboardReadText: (): string => clipboard.readText(),

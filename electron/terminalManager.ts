@@ -4,6 +4,7 @@ import path from 'node:path'
 import type * as PtyType from 'node-pty'
 import { IPC } from './ipcChannels'
 import { withClaudeLimitBridge } from './aiLimits'
+import { accountLabel, resolveTerminalEnv, touchAccount } from './accounts'
 
 // Load node-pty lazily so the app still launches (and shows its UI) even when the
 // native binary hasn't been compiled yet. Errors only surface when a terminal is
@@ -33,6 +34,9 @@ export interface CreateTerminalOptions {
   command: string
   cols?: number
   rows?: number
+  // When set, the AI CLI is launched with this linked account's isolated config
+  // directory (via per-CLI env vars) so its credentials don't collide.
+  accountId?: string
 }
 
 export interface TerminalSession {
@@ -42,6 +46,7 @@ export interface TerminalSession {
   cwd: string
   createdAt: number
   isActive: boolean
+  accountId?: string
 }
 
 const TYPE_LABEL: Record<TerminalType, string> = {
@@ -119,12 +124,18 @@ export class TerminalManager {
     const pty = await getPty()
     const { file, args } = this.resolveShell(options)
 
+    // Layer the linked account's isolated config-dir env vars on top of the
+    // inherited environment so each account's credentials stay separate.
+    const accountEnv = resolveTerminalEnv(options.accountId)
+    const env = { ...(process.env as Record<string, string>), ...accountEnv }
+    if (options.accountId) touchAccount(options.accountId)
+
     const ptyProcess = pty.spawn(file, args, {
       name: 'xterm-color',
       cols: options.cols ?? 80,
       rows: options.rows ?? 24,
       cwd: options.cwd,
-      env: process.env as Record<string, string>
+      env
     })
 
     this.terminals.set(id, ptyProcess)
@@ -140,16 +151,27 @@ export class TerminalManager {
     })
   }
 
+  // Title format: "Claude · İş hesabı · projem" — the linked account label (if
+  // any) sits right after the CLI label, matching the toolbar account menu.
+  private buildTitle(options: CreateTerminalOptions): string {
+    const parts = [TYPE_LABEL[options.type]]
+    const label = accountLabel(options.accountId)
+    if (label) parts.push(label)
+    parts.push(path.basename(options.cwd))
+    return parts.join(' · ')
+  }
+
   private async create(options: CreateTerminalOptions): Promise<TerminalSession> {
     const id = randomUUID()
     await this.spawnPty(id, options)
     return {
       id,
       type: options.type,
-      title: `${TYPE_LABEL[options.type]} · ${path.basename(options.cwd)}`,
+      title: this.buildTitle(options),
       cwd: options.cwd,
       createdAt: Date.now(),
-      isActive: true
+      isActive: true,
+      accountId: options.accountId
     }
   }
 

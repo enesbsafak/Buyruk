@@ -1,7 +1,11 @@
 import type {
   CreateTerminalOptions,
+  AccountsState,
   AiLimitsOverview,
+  CliKind,
   FileNode,
+  GitBranches,
+  GitFileSides,
   GitOverview,
   TerminalSession
 } from './types'
@@ -31,8 +35,25 @@ declare global {
       ): Promise<{ isRepo: boolean; branch: string; files: Record<string, string> }>
       gitOverview(root: string): Promise<GitOverview>
       gitDiff(root: string, filePath: string): Promise<string>
+      gitCommitDiff(root: string, hash: string): Promise<string>
+      gitFileSides(root: string, filePath: string): Promise<GitFileSides>
       gitFetch(root: string): Promise<GitOverview>
+      gitCommit(root: string, message: string, paths: string[]): Promise<GitOverview>
+      gitPush(root: string): Promise<GitOverview>
+      gitPull(root: string): Promise<GitOverview>
+      gitBranches(root: string): Promise<GitBranches>
+      gitCheckout(root: string, name: string): Promise<GitOverview>
+      gitCreateBranch(root: string, name: string): Promise<GitOverview>
       getAiLimits(options: { codexCommand?: string }): Promise<AiLimitsOverview>
+
+      // CLI accounts (multi-account linking)
+      accounts: {
+        list(): Promise<AccountsState>
+        add(input: { type: CliKind; label: string }): Promise<AccountsState>
+        remove(id: string): Promise<AccountsState>
+        rename(id: string, label: string): Promise<AccountsState>
+        setActive(type: CliKind, id: string): Promise<AccountsState>
+      }
       gitClone(options: {
         url: string
         parentDir: string

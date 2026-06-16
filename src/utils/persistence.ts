@@ -8,6 +8,7 @@ export interface SavedSession {
   type: TerminalType
   cwd: string
   title: string
+  accountId?: string
 }
 
 export interface RecentFolder {

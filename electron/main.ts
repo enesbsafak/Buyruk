@@ -8,6 +8,7 @@ import { IPC } from './ipcChannels'
 import { loadWindowState, trackWindowState } from './windowState'
 import { registerUpdaterHandlers, startAutoUpdateCheck } from './updater'
 import { ensureClaudeLimitBridge, registerAiLimitHandlers } from './aiLimits'
+import { registerAccountHandlers } from './accounts'
 
 let mainWindow: BrowserWindow | null = null
 let allowClose = false
@@ -106,6 +107,7 @@ app.whenReady().then(() => {
   registerFileSystemHandlers(ipcMain, () => mainWindow)
   terminalManager.registerHandlers(ipcMain)
   registerAiLimitHandlers(ipcMain)
+  registerAccountHandlers(ipcMain)
   registerWindowControls()
   registerUpdaterHandlers(ipcMain, () => mainWindow)
   createWindow()

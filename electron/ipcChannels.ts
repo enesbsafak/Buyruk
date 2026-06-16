@@ -19,12 +19,27 @@ export const IPC = {
   GIT_STATUS: 'fs:gitStatus',
   GIT_OVERVIEW: 'fs:gitOverview',
   GIT_DIFF: 'fs:gitDiff',
+  GIT_COMMIT_DIFF: 'fs:gitCommitDiff',
+  GIT_FILE_SIDES: 'fs:gitFileSides',
   GIT_FETCH: 'fs:gitFetch',
+  GIT_COMMIT: 'fs:gitCommit',
+  GIT_PUSH: 'fs:gitPush',
+  GIT_PULL: 'fs:gitPull',
+  GIT_BRANCHES: 'fs:gitBranches',
+  GIT_CHECKOUT: 'fs:gitCheckout',
+  GIT_CREATE_BRANCH: 'fs:gitCreateBranch',
   GIT_CLONE: 'fs:gitClone',
   GIT_CLONE_PROGRESS: 'fs:gitCloneProgress',
 
   // AI tool limits
   AI_LIMITS_GET: 'aiLimits:get',
+
+  // CLI accounts (multi-account linking)
+  ACCOUNTS_LIST: 'accounts:list',
+  ACCOUNTS_ADD: 'accounts:add',
+  ACCOUNTS_REMOVE: 'accounts:remove',
+  ACCOUNTS_RENAME: 'accounts:rename',
+  ACCOUNTS_SET_ACTIVE: 'accounts:setActive',
 
   // Terminal
   CREATE_TERMINAL: 'term:create',

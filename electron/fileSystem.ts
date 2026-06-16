@@ -24,6 +24,31 @@ function execGit(args: string[], cwd: string): Promise<string> {
   })
 }
 
+// Like execGit but rejects with git's stderr so write actions (commit/push/…)
+// can surface a real error message to the user instead of failing silently.
+function execGitStrict(args: string[], cwd: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      'git',
+      args,
+      { cwd, windowsHide: true, maxBuffer: 16 * 1024 * 1024 },
+      (err, stdout, stderr) => {
+        if (err) {
+          const message = String(stderr || stdout || err.message).trim()
+          reject(new Error(message || 'git komutu başarısız oldu'))
+        } else {
+          resolve(stdout.toString())
+        }
+      }
+    )
+  })
+}
+
+async function repoRootOf(root: string): Promise<string | null> {
+  const top = (await execGit(['rev-parse', '--show-toplevel'], root)).trim()
+  return top ? path.normalize(top) : null
+}
+
 export interface FileNode {
   name: string
   path: string
@@ -229,6 +254,102 @@ async function createUntrackedFileDiff(repoRoot: string, filePath: string): Prom
   if (!hasTrailingNewline) body.push('\\ No newline at end of file')
 
   return `${[...header, `@@ -0,0 +1,${lines.length} @@`, ...body].join('\n')}\n`
+}
+
+// Full patch for a single commit (`git show`): metadata header + per-file diff.
+// The hash is validated as hex since it flows into a git argument.
+async function getGitCommitDiff(root: string, hash: string): Promise<string> {
+  const safeHash = hash.trim()
+  if (!/^[0-9a-f]{4,40}$/i.test(safeHash)) return ''
+  const repoRoot = (await execGit(['rev-parse', '--show-toplevel'], root)).trim()
+  if (!repoRoot) return ''
+  const out = await execGit(
+    ['show', '--no-ext-diff', '--format=fuller', safeHash],
+    path.normalize(repoRoot)
+  )
+  return out.trimEnd()
+}
+
+// Stage the given files (-A handles deletions/renames) and commit them. Empty
+// selection or message is rejected so the UI can show a clear reason.
+async function gitCommit(root: string, message: string, paths: string[]): Promise<GitOverview> {
+  const repoRoot = await repoRootOf(root)
+  if (!repoRoot) throw new Error('Git deposu bulunamadı')
+  const msg = message.trim()
+  if (!msg) throw new Error('Commit mesajı boş olamaz')
+  const rels = paths
+    .map((p) => relativeGitPath(repoRoot, path.normalize(p)))
+    .filter((p): p is string => !!p)
+  if (rels.length === 0) throw new Error('Commit için en az bir dosya seç')
+  await execGitStrict(['add', '-A', '--', ...rels], repoRoot)
+  await execGitStrict(['commit', '-m', msg], repoRoot)
+  return getGitOverview(repoRoot)
+}
+
+async function gitPush(root: string): Promise<GitOverview> {
+  const repoRoot = await repoRootOf(root)
+  if (!repoRoot) throw new Error('Git deposu bulunamadı')
+  await execGitStrict(['push'], repoRoot)
+  return getGitOverview(repoRoot)
+}
+
+async function gitPull(root: string): Promise<GitOverview> {
+  const repoRoot = await repoRootOf(root)
+  if (!repoRoot) throw new Error('Git deposu bulunamadı')
+  await execGitStrict(['pull'], repoRoot)
+  return getGitOverview(repoRoot)
+}
+
+async function gitBranches(root: string): Promise<{ current: string; branches: string[] }> {
+  const repoRoot = await repoRootOf(root)
+  if (!repoRoot) return { current: '', branches: [] }
+  const out = await execGit(['branch', '--format=%(refname:short)'], repoRoot)
+  const branches = out
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const current = (await execGit(['rev-parse', '--abbrev-ref', 'HEAD'], repoRoot)).trim()
+  return { current, branches }
+}
+
+async function gitCheckout(root: string, name: string): Promise<GitOverview> {
+  const repoRoot = await repoRootOf(root)
+  if (!repoRoot) throw new Error('Git deposu bulunamadı')
+  await execGitStrict(['checkout', name], repoRoot)
+  return getGitOverview(repoRoot)
+}
+
+async function gitCreateBranch(root: string, name: string): Promise<GitOverview> {
+  const repoRoot = await repoRootOf(root)
+  if (!repoRoot) throw new Error('Git deposu bulunamadı')
+  const branch = name.trim()
+  if (!branch) throw new Error('Branch adı boş olamaz')
+  await execGitStrict(['checkout', '-b', branch], repoRoot)
+  return getGitOverview(repoRoot)
+}
+
+// Two sides for a side-by-side diff: original = HEAD version, modified = the file
+// on disk (working tree). New files have no original; deleted files have no modified.
+async function gitFileSides(
+  root: string,
+  filePath: string
+): Promise<{ original: string; modified: string; binary: boolean }> {
+  const repoRoot = await repoRootOf(root)
+  if (!repoRoot) return { original: '', modified: '', binary: false }
+  const rel = relativeGitPath(repoRoot, path.normalize(filePath))
+  if (!rel) return { original: '', modified: '', binary: false }
+
+  const original = await execGit(['show', `HEAD:${rel}`], repoRoot)
+  let modified = ''
+  let binary = false
+  try {
+    const buffer = await fs.readFile(filePath)
+    if (buffer.length > MAX_TEXT_SIZE || looksBinary(buffer)) binary = true
+    else modified = buffer.toString('utf8')
+  } catch {
+    // file deleted in the working tree → no modified side
+  }
+  return { original, modified, binary }
 }
 
 async function getGitDiff(root: string, filePath: string): Promise<string> {
@@ -455,6 +576,41 @@ export function registerFileSystemHandlers(
   ipcMain.handle(IPC.GIT_DIFF, async (_e, root: string, filePath: string): Promise<string> => {
     return getGitDiff(root, filePath)
   })
+
+  ipcMain.handle(IPC.GIT_COMMIT_DIFF, async (_e, root: string, hash: string): Promise<string> => {
+    return getGitCommitDiff(root, hash)
+  })
+
+  ipcMain.handle(
+    IPC.GIT_FILE_SIDES,
+    async (_e, root: string, filePath: string) => gitFileSides(root, filePath)
+  )
+
+  ipcMain.handle(
+    IPC.GIT_COMMIT,
+    async (_e, root: string, message: string, paths: string[]): Promise<GitOverview> =>
+      gitCommit(root, message, paths)
+  )
+
+  ipcMain.handle(IPC.GIT_PUSH, async (_e, root: string): Promise<GitOverview> => gitPush(root))
+
+  ipcMain.handle(IPC.GIT_PULL, async (_e, root: string): Promise<GitOverview> => gitPull(root))
+
+  ipcMain.handle(
+    IPC.GIT_BRANCHES,
+    async (_e, root: string): Promise<{ current: string; branches: string[] }> =>
+      gitBranches(root)
+  )
+
+  ipcMain.handle(
+    IPC.GIT_CHECKOUT,
+    async (_e, root: string, name: string): Promise<GitOverview> => gitCheckout(root, name)
+  )
+
+  ipcMain.handle(
+    IPC.GIT_CREATE_BRANCH,
+    async (_e, root: string, name: string): Promise<GitOverview> => gitCreateBranch(root, name)
+  )
 
   ipcMain.handle(IPC.GIT_OVERVIEW, async (_e, root: string): Promise<GitOverview> => {
     return getGitOverview(root)

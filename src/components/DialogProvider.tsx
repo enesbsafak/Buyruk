@@ -23,11 +23,25 @@ interface ConfirmOptions {
   confirmText?: string
 }
 
+export interface ChooseOption {
+  id: string
+  label: string
+  hint?: string
+  selected?: boolean
+}
+
+interface ChooseOptions {
+  title: string
+  message?: string
+  options: ChooseOption[]
+}
+
 type ToastType = 'info' | 'success' | 'error'
 
 interface DialogApi {
   prompt(options: PromptOptions): Promise<string | null>
   confirm(options: ConfirmOptions): Promise<boolean>
+  choose(options: ChooseOptions): Promise<string | null>
   notify(message: string, type?: ToastType): void
 }
 
@@ -41,6 +55,7 @@ type DialogState =
       value: string
     }
   | { kind: 'confirm'; title: string; message: string; danger?: boolean; confirmText?: string }
+  | { kind: 'choose'; title: string; message?: string; options: ChooseOption[] }
   | null
 
 interface Toast {
@@ -98,6 +113,16 @@ export function DialogProvider({ children }: { children: ReactNode }) {
           confirmText: options.confirmText
         })
       }),
+    choose: (options) =>
+      new Promise<string | null>((resolve) => {
+        resolver.current = resolve as (value: unknown) => void
+        setState({
+          kind: 'choose',
+          title: options.title,
+          message: options.message,
+          options: options.options
+        })
+      }),
     notify: (message, type = 'info') => {
       const id = crypto.randomUUID()
       setToasts((list) => [...list, { id, type, message }])
@@ -118,7 +143,29 @@ export function DialogProvider({ children }: { children: ReactNode }) {
           <div className="modal modal-small" role="presentation" onMouseDown={(e) => e.stopPropagation()}>
             <h3 className="modal-title">{state.title}</h3>
 
-            {state.kind === 'prompt' ? (
+            {state.kind === 'choose' ? (
+              <>
+                {state.message && <p className="dlg-message">{state.message}</p>}
+                <div className="dlg-choices">
+                  {state.options.map((opt) => (
+                    <button
+                      type="button"
+                      key={opt.id}
+                      className={`dlg-choice ${opt.selected ? 'is-selected' : ''}`}
+                      onClick={() => settle(opt.id)}
+                    >
+                      <span className="dlg-choice-label">{opt.label}</span>
+                      {opt.hint && <span className="dlg-choice-hint">{opt.hint}</span>}
+                    </button>
+                  ))}
+                </div>
+                <div className="modal-actions">
+                  <button type="button" className="btn btn-ghost" onClick={() => settle(null)}>
+                    İptal
+                  </button>
+                </div>
+              </>
+            ) : state.kind === 'prompt' ? (
               <>
                 {state.label && <label className="dlg-label">{state.label}</label>}
                 <input

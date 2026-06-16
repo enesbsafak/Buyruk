@@ -2,7 +2,32 @@ import { TerminalArea } from './TerminalArea'
 import { FileExplorer } from './FileExplorer'
 import { CodeEditor } from './CodeEditor'
 import { SplitLayout } from './SplitLayout'
-import type { GitStatus, SessionRuntime, Settings, TerminalType } from '../types'
+import { GitPanel } from './GitPanel'
+import type {
+  GitChange,
+  GitCommit,
+  GitOverview,
+  GitStatus,
+  SessionRuntime,
+  Settings,
+  TerminalType
+} from '../types'
+
+export interface GitPanelBundle {
+  open: boolean
+  overview: GitOverview
+  root: string | null
+  onClose: () => void
+  onRefresh: () => void
+  onFetch: () => void
+  onPush: () => void
+  onPull: () => void
+  onCommit: (message: string, paths: string[]) => Promise<boolean>
+  onCheckoutBranch: (name: string) => void
+  onCreateBranch: () => void
+  onOpenFileDiff: (change: GitChange) => void
+  onOpenCommitDiff: (commit: GitCommit) => void
+}
 
 interface WorkspacePanelsProps {
   sessions: SessionRuntime[]
@@ -27,6 +52,7 @@ interface WorkspacePanelsProps {
   onSelectFile: (path: string) => void
   onCloseFile: (path: string) => void
   onOpenGitDiff: (path: string) => void
+  gitPanel: GitPanelBundle
 }
 
 export function WorkspacePanels({
@@ -51,13 +77,46 @@ export function WorkspacePanels({
   onSaveFile,
   onSelectFile,
   onCloseFile,
-  onOpenGitDiff
+  onOpenGitDiff,
+  gitPanel
 }: WorkspacePanelsProps) {
   const monacoTheme = settings.theme === 'light' ? 'vs' : 'tokyo-night'
 
+  // Pin the right sidebar (file explorer + editor) to ~15% of the window so it stays
+  // compact no matter the window size; the terminal flexes to fill the rest.
+  const sidebarInitial = Math.max(240, Math.round(window.innerWidth * 0.15))
+
+  const editor = (
+    <CodeEditor
+      session={activeSession}
+      theme={monacoTheme}
+      onChangeContent={onChangeContent}
+      onSave={onSaveFile}
+      onSelectFile={onSelectFile}
+      onCloseFile={onCloseFile}
+    />
+  )
+
+  const gitDock = (
+    <GitPanel
+      overview={gitPanel.overview}
+      root={gitPanel.root}
+      onRefresh={gitPanel.onRefresh}
+      onFetch={gitPanel.onFetch}
+      onPush={gitPanel.onPush}
+      onPull={gitPanel.onPull}
+      onCommit={gitPanel.onCommit}
+      onCheckoutBranch={gitPanel.onCheckoutBranch}
+      onCreateBranch={gitPanel.onCreateBranch}
+      onOpenFileDiff={gitPanel.onOpenFileDiff}
+      onOpenCommitDiff={gitPanel.onOpenCommitDiff}
+      onClose={gitPanel.onClose}
+    />
+  )
+
   return (
     <div className="main">
-      <SplitLayout direction="horizontal" initial={760} min={260}>
+      <SplitLayout direction="horizontal" initial={sidebarInitial} min={200} anchor="second">
         <TerminalArea
           sessions={sessions}
           activeId={activeId}
@@ -73,6 +132,8 @@ export function WorkspacePanels({
           onToggleBroadcast={onToggleBroadcast}
         />
 
+        {/* Right sidebar: file explorer on top, then (optionally) the git panel
+            directly beneath it, with the editor at the bottom. */}
         <SplitLayout direction="vertical" initial={320} min={120}>
           <FileExplorer
             rootPath={activeSession?.cwd ?? null}
@@ -84,14 +145,14 @@ export function WorkspacePanels({
             refreshNonce={explorerNonce}
             onRefresh={onRefresh}
           />
-          <CodeEditor
-            session={activeSession}
-            theme={monacoTheme}
-            onChangeContent={onChangeContent}
-            onSave={onSaveFile}
-            onSelectFile={onSelectFile}
-            onCloseFile={onCloseFile}
-          />
+          {gitPanel.open ? (
+            <SplitLayout direction="vertical" initial={280} min={120}>
+              {gitDock}
+              {editor}
+            </SplitLayout>
+          ) : (
+            editor
+          )}
         </SplitLayout>
       </SplitLayout>
     </div>
