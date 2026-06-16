@@ -28,8 +28,11 @@ export default defineConfig({
         vite: {
           build: {
             outDir: 'dist-electron',
-            rollupOptions: {
-              // node-pty is a native module; never bundle it.
+            // Vite 8 bundles with Rolldown, and vite-plugin-electron reads
+            // `rolldownOptions` (dropping `rollupOptions`) on Vite 8+. Putting
+            // `external` here keeps node-pty's native .node binaries out of the
+            // bundle so they load from node_modules (app.asar.unpacked) at runtime.
+            rolldownOptions: {
               external: ['node-pty', 'electron-updater']
             }
           }
