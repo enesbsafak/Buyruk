@@ -47,7 +47,6 @@ function statusText(status: AiToolLimit['status']): string {
 }
 
 function sourceText(item: AiToolLimit): string {
-  if (item.source === 'linked' && item.accountLabel) return item.accountLabel
   if (item.source === 'global') return 'Global oturum'
   return 'Oturum yok'
 }

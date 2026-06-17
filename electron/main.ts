@@ -7,7 +7,6 @@ import { TerminalManager } from './terminalManager'
 import { IPC } from './ipcChannels'
 import { loadWindowState, trackWindowState } from './windowState'
 import { registerUpdaterHandlers, startAutoUpdateCheck } from './updater'
-import { registerAccountHandlers } from './accounts'
 import { registerAiLimitHandlers } from './aiLimits'
 import { assertTrustedIpcSender, isSafeDevServerUrl, isTrustedAppUrl } from './security'
 
@@ -132,7 +131,6 @@ app.whenReady().then(() => {
   Menu.setApplicationMenu(null) // remove the default top-left application menu
   registerFileSystemHandlers(ipcMain, () => mainWindow)
   terminalManager.registerHandlers(ipcMain)
-  registerAccountHandlers(ipcMain)
   registerAiLimitHandlers(ipcMain)
   registerWindowControls()
   registerUpdaterHandlers(ipcMain, () => mainWindow)

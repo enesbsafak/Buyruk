@@ -1,24 +1,11 @@
 export type TerminalType = 'cmd' | 'powershell' | 'claude' | 'codex' | 'opencode'
 
-// CLI types that support linking multiple accounts.
+// CLI types with AI-specific behavior (used by aiLimits and CLI-type logic).
 export type CliKind = 'claude' | 'codex' | 'opencode'
-
-export interface CliAccount {
-  id: string
-  type: CliKind
-  label: string
-  createdAt: number
-  lastUsedAt: number
-}
-
-export interface AccountsState {
-  accounts: CliAccount[]
-  activeByType: Partial<Record<CliKind, string>>
-}
 
 export type AiLimitTool = 'codex' | 'claude'
 export type AiLimitStatus = 'ready' | 'unavailable' | 'error'
-export type AiLimitSource = 'linked' | 'global' | 'none'
+export type AiLimitSource = 'global' | 'none'
 
 export interface AiLimitWindow {
   id: string
@@ -43,7 +30,6 @@ export interface AiToolLimit {
   metrics: AiLimitMetric[]
   updatedAt: number | null
   planType?: string | null
-  accountLabel?: string | null
   source: AiLimitSource
 }
 
@@ -53,8 +39,6 @@ export interface AiLimitsOverview {
 }
 
 export interface AiLimitsRequest {
-  codexAccountId?: string
-  claudeAccountId?: string
   force?: boolean
 }
 
@@ -69,7 +53,6 @@ export interface TerminalSession {
   cwd: string
   createdAt: number
   isActive: boolean
-  accountId?: string
 }
 
 export interface CreateTerminalOptions {
@@ -78,7 +61,6 @@ export interface CreateTerminalOptions {
   command: string
   cols?: number
   rows?: number
-  accountId?: string
 }
 
 export interface FileNode {
@@ -116,8 +98,6 @@ export interface GitFileSides {
 export type TerminalStatus = 'running' | 'exited'
 
 // A live session in the renderer: the base session data plus UI/runtime state.
-// accountId (inherited from TerminalSession) records which linked account, if
-// any, this AI CLI session is running under.
 export interface SessionRuntime extends TerminalSession {
   status: TerminalStatus
   exitCode?: number

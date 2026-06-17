@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from './Icon'
 import { CliIcon } from './CliIcon'
-import { AccountSwitcher } from './AccountSwitcher'
 import { AiLimitsPopover } from './AiLimitsPopover'
 import { basename } from '../utils/pathUtils'
-import type { UseAccounts } from '../hooks/useAccounts'
 import type { RecentFolder } from '../utils/persistence'
-import type { AiLimitsOverview, AiLimitsRequest, CliKind, SessionRuntime, TerminalType } from '../types'
+import type { AiLimitsOverview, SessionRuntime, TerminalType } from '../types'
 import brandLogo from '../assets/icon.png'
 
 interface ToolbarProps {
@@ -21,9 +19,6 @@ interface ToolbarProps {
   onUpdateAiTools: () => void
   orchestratorEnabled: boolean
   activeSession: SessionRuntime | null
-  accounts: UseAccounts
-  onSwitchAccount: (session: SessionRuntime, accountId: string) => void
-  onAddAccount: (type: CliKind) => void
 }
 
 const NEW_BUTTONS: { type: TerminalType; label: string }[] = [
@@ -45,10 +40,7 @@ export function Toolbar({
   onOpenRecent,
   onUpdateAiTools,
   orchestratorEnabled,
-  activeSession,
-  accounts,
-  onSwitchAccount,
-  onAddAccount
+  activeSession
 }: ToolbarProps) {
   const [maximized, setMaximized] = useState(false)
   const [recentsOpen, setRecentsOpen] = useState(false)
@@ -61,24 +53,12 @@ export function Toolbar({
 
   useEffect(() => window.api.windowControls.onMaximizedChange(setMaximized), [])
 
-  const limitRequest = (): AiLimitsRequest => {
-    const codexAccountId =
-      activeSession?.type === 'codex'
-        ? activeSession.accountId
-        : accounts.activeByType.codex
-    const claudeAccountId =
-      activeSession?.type === 'claude'
-        ? activeSession.accountId
-        : accounts.activeByType.claude
-    return { codexAccountId, claudeAccountId }
-  }
-
   const loadLimits = async (force = false, clearBeforeLoad = false) => {
     setLimitsLoading(true)
     setLimitsError(null)
     if (clearBeforeLoad) setLimitsOverview(null)
     try {
-      const overview = await window.api.aiLimits.get({ ...limitRequest(), force })
+      const overview = await window.api.aiLimits.get({ force })
       setLimitsOverview(overview)
     } catch (err) {
       setLimitsError(err instanceof Error ? err.message : String(err))
@@ -105,7 +85,7 @@ export function Toolbar({
     }
     window.addEventListener('mousedown', onDown)
     return () => window.removeEventListener('mousedown', onDown)
-  }, [limitsOpen, activeSession?.type, activeSession?.accountId, accounts.activeByType.codex, accounts.activeByType.claude])
+  }, [limitsOpen])
 
   return (
     <header className="toolbar">
@@ -168,12 +148,6 @@ export function Toolbar({
         <Icon name="download" />
         <span className="toolbar-label">Klonla</span>
       </button>
-      <AccountSwitcher
-        activeSession={activeSession}
-        accounts={accounts}
-        onSwitchAccount={onSwitchAccount}
-        onAddAccount={onAddAccount}
-      />
 
       <div className="toolbar-spacer" />
 

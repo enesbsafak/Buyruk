@@ -1,7 +1,6 @@
 import { app, type IpcMain, type IpcMainInvokeEvent } from 'electron'
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { accountDir, accountLabel, accountMatchesType } from './accounts'
 import { IPC } from './ipcChannels'
 import { assertTrustedIpcSender } from './security'
 import type {
@@ -12,13 +11,12 @@ import type {
   AiToolLimit
 } from '../src/types'
 
-type AuthSourceKind = 'linked' | 'global'
+type AuthSourceKind = 'global'
 
 interface AuthSource<T> {
   auth: T
   path: string
   kind: AuthSourceKind
-  label: string | null
 }
 
 interface CodexAuth {
@@ -77,11 +75,6 @@ function homePath(...parts: string[]): string {
   return path.join(app.getPath('home'), ...parts)
 }
 
-function accountAuthPath(type: 'codex' | 'claude', accountId: string): string | null {
-  if (!accountMatchesType(accountId, type)) return null
-  return path.join(accountDir(accountId), type === 'codex' ? 'auth.json' : '.credentials.json')
-}
-
 function readJsonFile<T>(filePath: string): T | null {
   if (!existsSync(filePath)) return null
   const raw = readFileSync(filePath, 'utf8')
@@ -109,14 +102,14 @@ function writeJsonAtomic(filePath: string, value: unknown): void {
 }
 
 function findAuthSource<T>(
-  candidates: { path: string; kind: AuthSourceKind; label: string | null }[],
+  candidates: { path: string; kind: AuthSourceKind }[],
   isUsable: (auth: T) => boolean
 ): AuthSource<T> | null {
   for (const candidate of candidates) {
     try {
       const auth = readJsonFile<T>(candidate.path)
       if (auth && isUsable(auth)) {
-        return { auth, path: candidate.path, kind: candidate.kind, label: candidate.label }
+        return { auth, path: candidate.path, kind: candidate.kind }
       }
     } catch {
       // Try the next candidate; the caller returns a generic auth error if none work.
@@ -125,42 +118,27 @@ function findAuthSource<T>(
   return null
 }
 
-function codexAuthCandidates(accountId?: string): { path: string; kind: AuthSourceKind; label: string | null }[] {
-  if (accountId) {
-    const authPath = accountAuthPath('codex', accountId)
-    return authPath
-      ? [{ path: authPath, kind: 'linked', label: accountLabel(accountId, 'codex') ?? 'Codex hesabı' }]
-      : []
-  }
-
-  const candidates: { path: string; kind: AuthSourceKind; label: string | null }[] = []
+function codexAuthCandidates(): { path: string; kind: AuthSourceKind }[] {
+  const candidates: { path: string; kind: AuthSourceKind }[] = []
   if (process.env.CODEX_HOME) {
-    candidates.push({ path: path.join(process.env.CODEX_HOME, 'auth.json'), kind: 'global', label: null })
+    candidates.push({ path: path.join(process.env.CODEX_HOME, 'auth.json'), kind: 'global' })
   }
   candidates.push(
-    { path: homePath('.config', 'codex', 'auth.json'), kind: 'global', label: null },
-    { path: homePath('.codex', 'auth.json'), kind: 'global', label: null }
+    { path: homePath('.config', 'codex', 'auth.json'), kind: 'global' },
+    { path: homePath('.codex', 'auth.json'), kind: 'global' }
   )
   return candidates
 }
 
-function claudeAuthCandidates(accountId?: string): { path: string; kind: AuthSourceKind; label: string | null }[] {
-  if (accountId) {
-    const authPath = accountAuthPath('claude', accountId)
-    return authPath
-      ? [{ path: authPath, kind: 'linked', label: accountLabel(accountId, 'claude') ?? 'Claude hesabı' }]
-      : []
-  }
-
-  const candidates: { path: string; kind: AuthSourceKind; label: string | null }[] = []
+function claudeAuthCandidates(): { path: string; kind: AuthSourceKind }[] {
+  const candidates: { path: string; kind: AuthSourceKind }[] = []
   if (process.env.CLAUDE_CONFIG_DIR) {
     candidates.push({
       path: path.join(process.env.CLAUDE_CONFIG_DIR, '.credentials.json'),
-      kind: 'global',
-      label: null
+      kind: 'global'
     })
   }
-  candidates.push({ path: homePath('.claude', '.credentials.json'), kind: 'global', label: null })
+  candidates.push({ path: homePath('.claude', '.credentials.json'), kind: 'global' })
   return candidates
 }
 
@@ -176,7 +154,7 @@ function emptyTool(
   tool: 'codex' | 'claude',
   status: AiToolLimit['status'],
   detail: string,
-  source?: Pick<AiToolLimit, 'accountLabel' | 'source'>
+  source?: Pick<AiToolLimit, 'source'>
 ): AiToolLimit {
   return {
     tool,
@@ -186,15 +164,13 @@ function emptyTool(
     windows: [],
     metrics: [],
     updatedAt: null,
-    source: source?.source ?? 'none',
-    accountLabel: source?.accountLabel ?? null
+    source: source?.source ?? 'none'
   }
 }
 
-function sourceFields(source: AuthSource<unknown>): Pick<AiToolLimit, 'accountLabel' | 'source'> {
+function sourceFields(source: AuthSource<unknown>): Pick<AiToolLimit, 'source'> {
   return {
-    source: source.kind,
-    accountLabel: source.label
+    source: source.kind
   }
 }
 
@@ -700,11 +676,11 @@ function parseClaudeUsage(response: HttpResult, source: AuthSource<ClaudeAuthFil
   }
 }
 
-async function readCodexLimits(accountId: string | undefined): Promise<AiToolLimit> {
-  const source = findAuthSource<CodexAuth>(codexAuthCandidates(accountId), hasCodexOAuth)
+async function readCodexLimits(): Promise<AiToolLimit> {
+  const source = findAuthSource<CodexAuth>(codexAuthCandidates(), hasCodexOAuth)
   if (!source) {
     const apiKeySource = findAuthSource<CodexAuth>(
-      codexAuthCandidates(accountId),
+      codexAuthCandidates(),
       (auth) => typeof auth.OPENAI_API_KEY === 'string' && auth.OPENAI_API_KEY.length > 0
     )
     if (apiKeySource) {
@@ -745,8 +721,8 @@ async function readCodexLimits(accountId: string | undefined): Promise<AiToolLim
   }
 }
 
-async function readClaudeLimits(accountId: string | undefined): Promise<AiToolLimit> {
-  const source = findAuthSource<ClaudeAuthFile>(claudeAuthCandidates(accountId), hasClaudeOAuth)
+async function readClaudeLimits(): Promise<AiToolLimit> {
+  const source = findAuthSource<ClaudeAuthFile>(claudeAuthCandidates(), hasClaudeOAuth)
   if (!source) return emptyTool('claude', 'unavailable', 'Claude OAuth oturumu bulunamadı.')
 
   const sourceMeta = sourceFields(source)
@@ -796,15 +772,9 @@ async function cachedTool(
   return tool
 }
 
-function cleanAccountId(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined
-}
-
 function cleanRequest(value: unknown): AiLimitsRequest {
   const input = readObject(value) ?? {}
   return {
-    codexAccountId: cleanAccountId(input.codexAccountId),
-    claudeAccountId: cleanAccountId(input.claudeAccountId),
     force: input.force === true
   }
 }
@@ -813,11 +783,9 @@ export function registerAiLimitHandlers(ipcMain: IpcMain): void {
   ipcMain.handle(IPC.AI_LIMITS_GET, async (event: IpcMainInvokeEvent, request: unknown) => {
     assertTrustedIpcSender(event)
     const payload = cleanRequest(request)
-    const codexKey = `codex:${payload.codexAccountId ?? 'global'}`
-    const claudeKey = `claude:${payload.claudeAccountId ?? 'global'}`
     const [codex, claude] = await Promise.all([
-      cachedTool(codexKey, CODEX_CACHE_MS, !!payload.force, () => readCodexLimits(payload.codexAccountId)),
-      cachedTool(claudeKey, CLAUDE_CACHE_MS, !!payload.force, () => readClaudeLimits(payload.claudeAccountId))
+      cachedTool('codex:global', CODEX_CACHE_MS, !!payload.force, () => readCodexLimits()),
+      cachedTool('claude:global', CLAUDE_CACHE_MS, !!payload.force, () => readClaudeLimits())
     ])
     return {
       tools: [codex, claude],

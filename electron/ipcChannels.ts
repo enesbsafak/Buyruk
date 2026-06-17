@@ -31,13 +31,6 @@ export const IPC = {
   GIT_CLONE: 'fs:gitClone',
   GIT_CLONE_PROGRESS: 'fs:gitCloneProgress',
 
-  // CLI accounts (multi-account linking)
-  ACCOUNTS_LIST: 'accounts:list',
-  ACCOUNTS_ADD: 'accounts:add',
-  ACCOUNTS_REMOVE: 'accounts:remove',
-  ACCOUNTS_RENAME: 'accounts:rename',
-  ACCOUNTS_SET_ACTIVE: 'accounts:setActive',
-
   // AI usage limits
   AI_LIMITS_GET: 'aiLimits:get',
 

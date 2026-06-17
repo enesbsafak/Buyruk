@@ -3,8 +3,7 @@ import { OrchestratorModal } from './OrchestratorModal'
 import { QuickOpen } from './QuickOpen'
 import { SettingsModal } from './SettingsModal'
 import type { OrchestratorConfig } from '../orchestrator'
-import type { UseAccounts } from '../hooks/useAccounts'
-import type { CliKind, SessionRuntime, Settings } from '../types'
+import type { SessionRuntime, Settings } from '../types'
 
 interface AppOverlaysProps {
   quickOpenOpen: boolean
@@ -16,8 +15,6 @@ interface AppOverlaysProps {
   settingsOpen: boolean
   settings: Settings
   orchestratorConfig: OrchestratorConfig
-  accounts: UseAccounts
-  onAddAccount: (type: CliKind) => void
   onPickFile: (path: string) => void
   onCloseQuickOpen: () => void
   onClosePalette: () => void
@@ -38,8 +35,6 @@ export function AppOverlays({
   settingsOpen,
   settings,
   orchestratorConfig,
-  accounts,
-  onAddAccount,
   onPickFile,
   onCloseQuickOpen,
   onClosePalette,
@@ -73,8 +68,6 @@ export function AppOverlays({
       <SettingsModal
         open={settingsOpen}
         settings={settings}
-        accounts={accounts}
-        onAddAccount={onAddAccount}
         onSave={onSaveSettings}
         onClose={onCloseSettings}
       />

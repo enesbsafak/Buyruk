@@ -5,7 +5,6 @@ import { useDialog } from './components/DialogProvider'
 import { useSessions } from './hooks/useSessions'
 import { useSettings } from './hooks/useSettings'
 import { useOrchestrator } from './hooks/useOrchestrator'
-import { useAccounts, type UseAccounts } from './hooks/useAccounts'
 import { terminalBus } from './terminalBus'
 import { describeOrchestratorConfig } from './orchestrator'
 import { getLanguage, isImageFile } from './utils/language'
@@ -26,8 +25,6 @@ import {
 } from './utils/persistence'
 import { INITIAL_UPDATE_STATUS, type AppUpdateStatus } from './updateTypes'
 import {
-  isCliKind,
-  type CliKind,
   type GitChange,
   type GitCommit,
   type GitOverview,
@@ -333,7 +330,6 @@ interface TerminalControllerOptions {
   activeId: string | null
   activeSessionRef: { current: SessionRuntime | null }
   actions: ReturnType<typeof useSessions>['actions']
-  accounts: UseAccounts
   broadcast: boolean
   dialog: ReturnType<typeof useDialog>
   sessionsRef: { current: SessionRuntime[] }
@@ -341,14 +337,10 @@ interface TerminalControllerOptions {
   dispatchUi: (action: UiAction) => void
 }
 
-const ADD_ACCOUNT_ID = '__add-account__'
-const NO_ACCOUNT_ID = '__no-account__'
-
 function useTerminalController({
   activeId,
   activeSessionRef,
   actions,
-  accounts,
   broadcast,
   dialog,
   sessionsRef,
@@ -405,19 +397,14 @@ function useTerminalController({
   }, [actions])
 
   const spawnTerminal = useCallback(
-    async (type: TerminalType, cwd: string, accountId?: string) => {
-      // For AI CLIs, fall back to the type's default linked account when the
-      // caller didn't pick one (e.g. opening a recent folder).
-      const resolvedAccountId =
-        accountId ?? (isCliKind(type) ? accounts.resolveDefault(type)?.id : undefined)
+    async (type: TerminalType, cwd: string) => {
       try {
         const session = await window.api.createTerminal({
           type,
           cwd,
           command: commandFor(type, settings),
           cols: 80,
-          rows: 24,
-          accountId: resolvedAccountId
+          rows: 24
         })
         actions.add(session)
         dispatchUi({ type: 'set-status-message', message: `Açıldı: ${session.title}` })
@@ -426,118 +413,17 @@ function useTerminalController({
         dialog.notify(`Terminal açılamadı: ${errMsg(err)}`, 'error')
       }
     },
-    [actions, accounts, settings, dialog, dispatchUi]
-  )
-
-  // Link a brand-new account of `type`, then open a session under it so the user
-  // can complete the CLI's browser login (its credentials land in the account's
-  // isolated config dir). cwd defaults to the project dir, else we ask for one.
-  const addAccountFlow = useCallback(
-    async (type: CliKind) => {
-      const label = await dialog.prompt({
-        title: 'Hesap Bağla',
-        label: `${commandFor(type, settings)} için yeni hesap`,
-        placeholder: 'Örn. İş hesabı',
-        confirmText: 'Bağla'
-      })
-      if (!label) return
-      const account = await accounts.add(type, label)
-      if (!account) {
-        dialog.notify('Hesap oluşturulamadı', 'error')
-        return
-      }
-      await accounts.setActive(type, account.id)
-      const cwd =
-        settings.defaultProjectDir ||
-        (await window.api.selectFolder(settings.defaultProjectDir || undefined))
-      if (!cwd) return
-      await spawnTerminal(type, cwd, account.id)
-      dialog.notify(`"${label}" için terminalde giriş yapın (/login)`, 'info')
-    },
-    [accounts, dialog, settings, spawnTerminal]
-  )
-
-  // Before picking a project folder, ask which linked account the new AI session
-  // should use. Returns the chosen accountId, or null to abort the whole action.
-  const pickAccountForNew = useCallback(
-    async (type: CliKind): Promise<string | null | undefined> => {
-      const list = accounts.accountsByType(type)
-      if (list.length === 0) {
-        return undefined
-      }
-
-      const defaultId = accounts.resolveDefault(type)?.id
-      const choice = await dialog.choose({
-        title: 'Hesap Seç',
-        message: 'Bu oturum hangi hesapla açılsın?',
-        options: [
-          ...list.map((a) => ({
-            id: a.id,
-            label: a.label,
-            hint: a.id === defaultId ? 'varsayılan' : undefined,
-            selected: a.id === defaultId
-          })),
-          { id: ADD_ACCOUNT_ID, label: '+ Yeni hesap bağla' },
-          { id: NO_ACCOUNT_ID, label: 'Hesapsız devam et' }
-        ]
-      })
-      if (choice === null) return null
-      if (choice === ADD_ACCOUNT_ID) {
-        await addAccountFlow(type)
-        return null
-      }
-      if (choice === NO_ACCOUNT_ID) return undefined
-      await accounts.setActive(type, choice)
-      return choice
-    },
-    [accounts, dialog, addAccountFlow]
+    [actions, settings, dialog, dispatchUi]
   )
 
   const handleNewTerminal = useCallback(
     async (type: TerminalType) => {
-      let accountId: string | undefined
-      if (isCliKind(type)) {
-        const picked = await pickAccountForNew(type)
-        if (picked === null) return // aborted or handled by addAccountFlow
-        accountId = picked
-      }
       const cwd = await window.api.selectFolder(settings.defaultProjectDir || undefined)
       if (!cwd) return
-      await spawnTerminal(type, cwd, accountId)
+      await spawnTerminal(type, cwd)
     },
-    [pickAccountForNew, spawnTerminal, settings.defaultProjectDir]
+    [spawnTerminal, settings.defaultProjectDir]
   )
-
-  // Switch the account of a live AI session: rebind its env and restart in place.
-  const handleSwitchAccount = useCallback(
-    async (session: SessionRuntime, accountId: string) => {
-      if (!isCliKind(session.type) || session.accountId === accountId) return
-      const label = accounts.accountByIdOfType(accountId, session.type)?.label
-      actions.setAccount(session.id, accountId)
-      // Reflect the new account in the tab title (matches the create/restore format).
-      actions.rename(session.id, sessionTitle(session.type, session.cwd, label))
-      await accounts.setActive(session.type, accountId)
-      terminalBus.clear(session.id)
-      actions.restart(session.id)
-      try {
-        await window.api.restartTerminal({
-          id: session.id,
-          type: session.type,
-          cwd: session.cwd,
-          command: commandFor(session.type, settings),
-          cols: 80,
-          rows: 24,
-          accountId
-        })
-        dispatchUi({ type: 'set-status-message', message: `Hesap değişti: ${label ?? 'hesap'}` })
-      } catch (err) {
-        dialog.notify(`Hesap değiştirilemedi: ${errMsg(err)}`, 'error')
-      }
-    },
-    [actions, accounts, settings, dialog, dispatchUi]
-  )
-
-  const handleAddAccount = useCallback((type: CliKind) => addAccountFlow(type), [addAccountFlow])
 
   const handleOpenRecent = useCallback(
     (recent: RecentFolder) => spawnTerminal(recent.type, recent.cwd),
@@ -584,8 +470,7 @@ function useTerminalController({
           cwd: session.cwd,
           command: commandFor(session.type, settings),
           cols: 80,
-          rows: 24,
-          accountId: session.accountId
+          rows: 24
         })
         dispatchUi({ type: 'set-status-message', message: `Yeniden başlatıldı: ${session.title}` })
       } catch (err) {
@@ -690,8 +575,6 @@ function useTerminalController({
     handleOpenRecent,
     handleCloneRepo,
     handleRestart,
-    handleSwitchAccount,
-    handleAddAccount,
     handleUpdateAiTools,
     handleOpenTerminalHere,
     handleRenameSession,
@@ -705,7 +588,6 @@ interface FileControllerOptions {
   activeSession: SessionRuntime | null
   activeSessionRef: { current: SessionRuntime | null }
   actions: ReturnType<typeof useSessions>['actions']
-  accounts: UseAccounts
   dialog: ReturnType<typeof useDialog>
   defaultProjectDir: string
   explorerNonce: number
@@ -719,7 +601,6 @@ function useFileController({
   activeSession,
   activeSessionRef,
   actions,
-  accounts,
   dialog,
   defaultProjectDir,
   explorerNonce,
@@ -967,10 +848,7 @@ function useFileController({
     }
     const dir = await window.api.selectFolder(defaultProjectDir || undefined)
     if (!dir) return
-    const accountLabel = isCliKind(activeSession.type)
-      ? accounts.accountByIdOfType(activeSession.accountId, activeSession.type)?.label
-      : undefined
-    const title = sessionTitle(activeSession.type, dir, accountLabel)
+    const title = sessionTitle(activeSession.type, dir)
     try {
       terminalBus.clear(activeSession.id)
       await window.api.restartTerminal({
@@ -979,8 +857,7 @@ function useFileController({
         cwd: dir,
         command: commandFor(activeSession.type, settings),
         cols: 80,
-        rows: 24,
-        accountId: activeSession.accountId
+        rows: 24
       })
       actions.setCwd(activeSession.id, dir, title)
       actions.restart(activeSession.id)
@@ -989,7 +866,7 @@ function useFileController({
       dialog.notify(`Klasör değiştirilemedi: ${errMsg(err)}`, 'error')
     }
     bumpExplorer()
-  }, [activeSession, actions, accounts, bumpExplorer, dialog, defaultProjectDir, dispatchUi, settings])
+  }, [activeSession, actions, bumpExplorer, dialog, defaultProjectDir, dispatchUi, settings])
 
   const handleNewFolder = useCallback(async () => {
     const parent = await window.api.createFolderDialog(defaultProjectDir || undefined)
@@ -1197,7 +1074,6 @@ function useAppModel() {
     reset: resetOrchestrator
   } = useOrchestrator(settings)
   const { sessions, activeId, activeSession, actions } = useSessions()
-  const accounts = useAccounts()
 
   const [ui, dispatchUi] = useReducer(uiReducer, undefined, createInitialUiState)
   const {
@@ -1253,8 +1129,6 @@ function useAppModel() {
     handleOpenRecent,
     handleCloneRepo,
     handleRestart,
-    handleSwitchAccount,
-    handleAddAccount,
     handleUpdateAiTools,
     handleOpenTerminalHere,
     handleRenameSession,
@@ -1265,7 +1139,6 @@ function useAppModel() {
     activeId,
     activeSessionRef,
     actions,
-    accounts,
     broadcast,
     dialog,
     sessionsRef,
@@ -1295,7 +1168,6 @@ function useAppModel() {
     activeSession,
     activeSessionRef,
     actions,
-    accounts,
     dialog,
     defaultProjectDir: settings.defaultProjectDir,
     explorerNonce,
@@ -1383,8 +1255,7 @@ function useAppModel() {
             cwd: s.cwd,
             command: commandFor(s.type, initialSettingsRef.current),
             cols: 80,
-            rows: 24,
-            accountId: s.accountId
+            rows: 24
           })
           if (!cancelled) addSessionRef.current(session)
         } catch {
@@ -1405,8 +1276,7 @@ function useAppModel() {
       sessions.map((s) => ({
         type: s.type,
         cwd: s.cwd,
-        title: s.title,
-        accountId: s.accountId
+        title: s.title
       }))
     )
   }, [sessions])
@@ -1503,9 +1373,6 @@ function useAppModel() {
     handleResetOrchestrator,
     handleRefreshGit,
     handleRestart,
-    handleSwitchAccount,
-    handleAddAccount,
-    accounts,
     handleSaveOrchestrator,
     handleSaveSettings,
     handleSelectFile,

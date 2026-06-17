@@ -1,7 +1,7 @@
 import { clipboard, contextBridge, ipcRenderer } from 'electron'
 import { IPC } from './ipcChannels'
 import type { AppUpdateStatus } from '../src/updateTypes'
-import type { AccountsState, AiLimitsOverview, AiLimitsRequest, CliKind, GitOverview } from '../src/types'
+import type { AiLimitsOverview, AiLimitsRequest, GitOverview } from '../src/types'
 
 export interface FileNode {
   name: string
@@ -17,7 +17,6 @@ export interface CreateTerminalOptions {
   command: string
   cols?: number
   rows?: number
-  accountId?: string
 }
 
 export interface TerminalSession {
@@ -27,7 +26,6 @@ export interface TerminalSession {
   cwd: string
   createdAt: number
   isActive: boolean
-  accountId?: string
 }
 
 const api = {
@@ -94,19 +92,6 @@ const api = {
     const listener = (_e: unknown, message: string) => callback(message)
     ipcRenderer.on(IPC.GIT_CLONE_PROGRESS, listener)
     return () => ipcRenderer.removeListener(IPC.GIT_CLONE_PROGRESS, listener)
-  },
-
-  // ---- CLI accounts (multi-account linking) ----
-  accounts: {
-    list: (): Promise<AccountsState> => ipcRenderer.invoke(IPC.ACCOUNTS_LIST),
-    add: (input: { type: CliKind; label: string }): Promise<AccountsState> =>
-      ipcRenderer.invoke(IPC.ACCOUNTS_ADD, input),
-    remove: (id: string): Promise<AccountsState> =>
-      ipcRenderer.invoke(IPC.ACCOUNTS_REMOVE, id),
-    rename: (id: string, label: string): Promise<AccountsState> =>
-      ipcRenderer.invoke(IPC.ACCOUNTS_RENAME, id, label),
-    setActive: (type: CliKind, id: string): Promise<AccountsState> =>
-      ipcRenderer.invoke(IPC.ACCOUNTS_SET_ACTIVE, type, id)
   },
 
   // ---- AI usage limits ----

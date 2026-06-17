@@ -7,10 +7,8 @@ import { AppOverlays } from './AppOverlays'
 import type { Command } from './CommandPalette'
 import type { OrchestratorConfig } from '../orchestrator'
 import type { RecentFolder } from '../utils/persistence'
-import type { UseAccounts } from '../hooks/useAccounts'
 import type { AppUpdateStatus } from '../updateTypes'
 import type {
-  CliKind,
   GitChange,
   GitCommit,
   GitOverview,
@@ -63,9 +61,6 @@ interface AppViewProps {
   handleResetOrchestrator: () => void
   handleRefreshGit: () => void
   handleRestart: (session: SessionRuntime) => void
-  handleSwitchAccount: (session: SessionRuntime, accountId: string) => void
-  handleAddAccount: (type: CliKind) => void
-  accounts: UseAccounts
   handleSaveOrchestrator: (config: OrchestratorConfig) => void
   handleSaveSettings: (settings: Settings) => void
   handleSelectFile: (path: string) => void
@@ -132,9 +127,6 @@ export function AppView({
   handleResetOrchestrator,
   handleRefreshGit,
   handleRestart,
-  handleSwitchAccount,
-  handleAddAccount,
-  accounts,
   handleSaveOrchestrator,
   handleSaveSettings,
   handleSelectFile,
@@ -204,9 +196,6 @@ export function AppView({
         onUpdateAiTools={handleUpdateAiTools}
         orchestratorEnabled={orchestratorConfig.enabled}
         activeSession={activeSession}
-        accounts={accounts}
-        onSwitchAccount={handleSwitchAccount}
-        onAddAccount={handleAddAccount}
       />
 
       {sessions.length === 0 ? (
@@ -267,8 +256,6 @@ export function AppView({
         settingsOpen={settingsOpen}
         settings={settings}
         orchestratorConfig={orchestratorConfig}
-        accounts={accounts}
-        onAddAccount={handleAddAccount}
         onPickFile={handleOpenFile}
         onCloseQuickOpen={closeQuickOpen}
         onClosePalette={closePalette}

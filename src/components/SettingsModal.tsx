@@ -1,145 +1,24 @@
 import { useReducer } from 'react'
 import { DEFAULT_SETTINGS } from '../hooks/useSettings'
-import { useDialog } from './DialogProvider'
-import { CliIcon } from './CliIcon'
-import type { UseAccounts } from '../hooks/useAccounts'
-import type { CliKind, Settings, ThemeName } from '../types'
+import type { Settings, ThemeName } from '../types'
 
 interface SettingsModalProps {
   open: boolean
   settings: Settings
-  accounts: UseAccounts
-  onAddAccount: (type: CliKind) => void
   onSave: (settings: Settings) => void
   onClose: () => void
 }
 
-const ACCOUNT_KINDS: { type: CliKind; label: string }[] = [
-  { type: 'claude', label: 'Claude' },
-  { type: 'codex', label: 'Codex' },
-  { type: 'opencode', label: 'OpenCode' }
-]
-
-export function SettingsModal({
-  open,
-  settings,
-  accounts,
-  onAddAccount,
-  onSave,
-  onClose
-}: SettingsModalProps) {
+export function SettingsModal({ open, settings, onSave, onClose }: SettingsModalProps) {
   if (!open) return null
 
   return (
     <SettingsModalContent
       key={JSON.stringify(settings)}
       settings={settings}
-      accounts={accounts}
-      onAddAccount={onAddAccount}
       onSave={onSave}
       onClose={onClose}
     />
-  )
-}
-
-interface AccountsSectionProps {
-  accounts: UseAccounts
-  onAddAccount: (type: CliKind) => void
-  onClose: () => void
-}
-
-// Manage linked CLI accounts: set the default, rename, remove, or link a new one.
-// Account operations apply immediately (independent of the Save button below).
-function AccountsSection({ accounts, onAddAccount, onClose }: AccountsSectionProps) {
-  const dialog = useDialog()
-
-  const handleRename = async (id: string, current: string) => {
-    const label = await dialog.prompt({
-      title: 'Hesabı Yeniden Adlandır',
-      label: 'Yeni etiket',
-      defaultValue: current,
-      confirmText: 'Kaydet'
-    })
-    if (label) await accounts.rename(id, label)
-  }
-
-  const handleRemove = async (id: string, label: string) => {
-    const ok = await dialog.confirm({
-      title: 'Hesabı Sil',
-      message: `"${label}" hesabının kayıtlı giriş bilgileri silinecek. Emin misin?`,
-      danger: true,
-      confirmText: 'Sil'
-    })
-    if (ok) await accounts.remove(id)
-  }
-
-  return (
-    <div className="field">
-      <span className="field-label">Bağlı hesaplar</span>
-      <span className="field-hint">
-        Her CLI için birden fazla hesap bağlayabilirsin. Hesap bağladığında giriş
-        yapman için bir terminal açılır; giriş bilgileri o hesaba özel saklanır.
-      </span>
-
-      {ACCOUNT_KINDS.map(({ type, label }) => {
-        const list = accounts.accountsByType(type)
-        const activeId = accounts.activeByType[type]
-        return (
-          <div className="account-group" key={type}>
-            <div className="account-group-head">
-              <CliIcon type={type} size={15} />
-              <span className="account-group-title">{label}</span>
-              <button
-                type="button"
-                className="btn btn-ghost account-add-btn"
-                onClick={() => {
-                  onClose()
-                  onAddAccount(type)
-                }}
-              >
-                + Hesap Bağla
-              </button>
-            </div>
-            {list.length === 0 ? (
-              <div className="account-group-empty">Bağlı hesap yok.</div>
-            ) : (
-              <ul className="account-list">
-                {list.map((a) => (
-                  <li className="account-row" key={a.id}>
-                    <span className="account-row-label">{a.label}</span>
-                    {a.id === activeId ? (
-                      <span className="account-row-badge">varsayılan</span>
-                    ) : (
-                      <button
-                        type="button"
-                        className="account-row-action"
-                        onClick={() => accounts.setActive(type, a.id)}
-                      >
-                        Varsayılan yap
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      className="account-row-action"
-                      onClick={() => handleRename(a.id, a.label)}
-                    >
-                      Yeniden adlandır
-                    </button>
-                    <button
-                      type="button"
-                      className="account-row-action account-row-danger"
-                      onClick={() => handleRemove(a.id, a.label)}
-                    >
-                      Sil
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )
-      })}
-    </div>
   )
 }
 
@@ -163,8 +42,6 @@ function settingsReducer(draft: Settings, action: SettingsAction): Settings {
 
 function SettingsModalContent({
   settings,
-  accounts,
-  onAddAccount,
   onSave,
   onClose
 }: Omit<SettingsModalProps, 'open'>) {
@@ -225,8 +102,6 @@ function SettingsModalContent({
             placeholder="opencode"
           />
         </label>
-
-        <AccountsSection accounts={accounts} onAddAccount={onAddAccount} onClose={onClose} />
 
         <label className="field">
           <span className="field-label">Varsayılan proje klasörü</span>

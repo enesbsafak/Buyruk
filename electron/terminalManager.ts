@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import type * as PtyType from 'node-pty'
 import { IPC } from './ipcChannels'
-import { accountLabel, accountMatchesType, isCliKind, resolveTerminalEnv, touchAccount } from './accounts'
 import { assertTrustedIpcSender, assertWorkspaceRoot } from './security'
 
 // Load node-pty lazily so the app still launches (and shows its UI) even when the
@@ -34,9 +33,6 @@ export interface CreateTerminalOptions {
   command: string
   cols?: number
   rows?: number
-  // When set, the AI CLI is launched with this linked account's isolated config
-  // directory (via per-CLI env vars) so its credentials don't collide.
-  accountId?: string
 }
 
 export interface TerminalSession {
@@ -46,7 +42,6 @@ export interface TerminalSession {
   cwd: string
   createdAt: number
   isActive: boolean
-  accountId?: string
 }
 
 const TYPE_LABEL: Record<TerminalType, string> = {
@@ -151,8 +146,7 @@ export class TerminalManager {
       cwd: assertWorkspaceRoot(options.cwd),
       command: command || fallbackCommand,
       cols: clampDimension(options.cols, 80),
-      rows: clampDimension(options.rows, 24),
-      accountId: typeof options.accountId === 'string' ? options.accountId : undefined
+      rows: clampDimension(options.rows, 24)
     }
   }
 
@@ -181,12 +175,7 @@ export class TerminalManager {
     const pty = await getPty()
     const { file, args } = this.resolveShell(options)
 
-    // Layer the linked account's isolated config-dir env vars on top of the
-    // inherited environment so each account's credentials stay separate.
-    const cliType = isCliKind(options.type) ? options.type : undefined
-    const accountEnv = resolveTerminalEnv(cliType, options.accountId)
-    const env = { ...(process.env as Record<string, string>), ...accountEnv }
-    if (cliType && accountMatchesType(options.accountId, cliType)) touchAccount(options.accountId!)
+    const env = { ...(process.env as Record<string, string>) }
 
     const ptyProcess = pty.spawn(file, args, {
       name: 'xterm-color',
@@ -209,14 +198,9 @@ export class TerminalManager {
     })
   }
 
-  // Title format: "Claude · İş hesabı · projem" — the linked account label (if
-  // any) sits right after the CLI label, matching the toolbar account menu.
+  // Title format: "Claude · projem".
   private buildTitle(options: CreateTerminalOptions): string {
-    const parts = [TYPE_LABEL[options.type]]
-    const label = accountLabel(options.accountId, isCliKind(options.type) ? options.type : undefined)
-    if (label) parts.push(label)
-    parts.push(path.basename(options.cwd))
-    return parts.join(' · ')
+    return `${TYPE_LABEL[options.type]} · ${path.basename(options.cwd)}`
   }
 
   private async create(options: CreateTerminalOptions): Promise<TerminalSession> {
@@ -229,8 +213,7 @@ export class TerminalManager {
       title: this.buildTitle(safeOptions),
       cwd: safeOptions.cwd,
       createdAt: Date.now(),
-      isActive: true,
-      accountId: safeOptions.accountId
+      isActive: true
     }
   }
 

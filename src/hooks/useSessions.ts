@@ -17,7 +17,6 @@ type Action =
   | { type: 'REMOVE'; id: string }
   | { type: 'SET_STATUS'; id: string; status: TerminalStatus; exitCode?: number }
   | { type: 'RESTART'; id: string }
-  | { type: 'SET_ACCOUNT'; id: string; accountId?: string }
   | { type: 'RENAME'; id: string; title: string }
   | { type: 'SET_CWD'; id: string; cwd: string; title: string }
   | { type: 'OPEN_FILE'; id: string; file: OpenFile }
@@ -87,9 +86,6 @@ function reducer(state: State, action: Action): State {
         exitCode: undefined,
         gen: s.gen + 1
       }))
-
-    case 'SET_ACCOUNT':
-      return mapSession(state, action.id, (s) => ({ ...s, accountId: action.accountId }))
 
     case 'RENAME':
       return mapSession(state, action.id, (s) => ({ ...s, title: action.title }))
@@ -173,8 +169,6 @@ export function useSessions() {
       setStatus: (id: string, status: TerminalStatus, exitCode?: number) =>
         dispatch({ type: 'SET_STATUS', id, status, exitCode }),
       restart: (id: string) => dispatch({ type: 'RESTART', id }),
-      setAccount: (id: string, accountId?: string) =>
-        dispatch({ type: 'SET_ACCOUNT', id, accountId }),
       rename: (id: string, title: string) => dispatch({ type: 'RENAME', id, title }),
       setCwd: (id: string, cwd: string, title: string) =>
         dispatch({ type: 'SET_CWD', id, cwd, title }),
