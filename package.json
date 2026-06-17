@@ -1,6 +1,6 @@
 {
   "name": "buyruk",
-  "version": "1.0.14",
+  "version": "1.0.15",
   "description": "Buyruk — multi-CLI terminal workspace, file manager and code editor for Windows (Electron + React + TypeScript + Vite)",
   "main": "dist-electron/main.js",
   "author": "Buyruk",
