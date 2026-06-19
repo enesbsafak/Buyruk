@@ -15,6 +15,23 @@ interface StatusBarProps {
   onInstallUpdate: () => void
 }
 
+function updateActionLabel(status: AppUpdateStatus): string {
+  switch (status.state) {
+    case 'checking':
+      return 'Denetleniyor'
+    case 'available':
+    case 'downloading':
+      return 'İndiriliyor'
+    case 'downloaded':
+      return 'Yeniden başlat'
+    case 'error':
+      return 'Tekrar dene'
+    case 'idle':
+    case 'not-available':
+      return 'Denetle'
+  }
+}
+
 export function StatusBar({
   activeSession,
   terminalCount,
@@ -37,6 +54,7 @@ export function StatusBar({
     updateStatus.state === 'available' ||
     updateStatus.state === 'downloading'
   const updateReady = updateStatus.state === 'downloaded'
+  const updateButtonLabel = updateActionLabel(updateStatus)
 
   return (
     <footer className="status-bar">
@@ -90,7 +108,7 @@ export function StatusBar({
           onClick={updateReady ? onInstallUpdate : onCheckForUpdates}
           disabled={updateBusy}
         >
-          {updateReady ? 'Yeniden başlat' : 'Güncelle'}
+          {updateButtonLabel}
         </button>
       </span>
     </footer>

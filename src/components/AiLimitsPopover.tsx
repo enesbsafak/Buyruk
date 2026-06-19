@@ -47,6 +47,9 @@ function statusText(status: AiToolLimit['status']): string {
 }
 
 function sourceText(item: AiToolLimit): string {
+  if (item.tool === 'opencode') {
+    return item.source === 'global' ? 'Yerel OpenCode stats' : 'OpenCode verisi yok'
+  }
   if (item.source === 'global') return 'Global oturum'
   return 'Oturum yok'
 }

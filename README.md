@@ -56,7 +56,7 @@ Güvenlik tarafında `contextIsolation: true` ve `nodeIntegration: false` kullan
 Hazır Windows installer için release sayfasındaki `.exe` dosyasını indir:
 
 ```text
-Buyruk-1.0.5-win-x64.exe
+Buyruk-<version>-win-x64.exe
 ```
 
 Installer henüz imzalı değildir. Bu yüzden Windows SmartScreen uyarısı gösterebilir.

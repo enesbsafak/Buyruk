@@ -83,34 +83,34 @@ function BranchMenu({
       {open && (
         <div className="dropdown-panel git-branch-panel">
           {branches.branches.length === 0 && (
-            <div className="account-panel-empty">Branch bulunamadı</div>
+            <div className="dropdown-empty">Branch bulunamadı</div>
           )}
           {branches.branches.map((name) => (
             <button
               type="button"
               key={name}
-              className="dropdown-item account-item"
+              className="dropdown-item dropdown-check-item"
               onClick={() => {
                 setOpen(false)
                 if (name !== current) onCheckout(name)
               }}
             >
-              <span className="account-item-check">
+              <span className="dropdown-item-check">
                 {name === current ? <Icon name="save" size={13} /> : null}
               </span>
               <span className="dropdown-item-name">{name}</span>
             </button>
           ))}
-          <div className="account-panel-sep" />
+          <div className="dropdown-sep" />
           <button
             type="button"
-            className="dropdown-item account-item account-item-add"
+            className="dropdown-item dropdown-check-item dropdown-item-accent"
             onClick={() => {
               setOpen(false)
               onCreate()
             }}
           >
-            <span className="account-item-check">
+            <span className="dropdown-item-check">
               <Icon name="folder-plus" size={13} />
             </span>
             <span className="dropdown-item-name">Yeni branch</span>

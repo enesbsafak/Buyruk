@@ -11,7 +11,7 @@ const UPDATER_CACHE_DIR = 'buyruk-updater'
 
 let currentStatus: AppUpdateStatus = {
   state: 'idle',
-  message: 'Güncelleme hazır',
+  message: 'Güncelleme denetlenmedi',
   version: app.getVersion()
 }
 let listenersRegistered = false

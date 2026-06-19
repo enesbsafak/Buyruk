@@ -3,7 +3,7 @@ export type TerminalType = 'cmd' | 'powershell' | 'claude' | 'codex' | 'opencode
 // CLI types with AI-specific behavior (used by aiLimits and CLI-type logic).
 export type CliKind = 'claude' | 'codex' | 'opencode'
 
-export type AiLimitTool = 'codex' | 'claude'
+export type AiLimitTool = 'codex' | 'claude' | 'opencode'
 export type AiLimitStatus = 'ready' | 'unavailable' | 'error'
 export type AiLimitSource = 'global' | 'none'
 

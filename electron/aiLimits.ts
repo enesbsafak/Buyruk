@@ -1,4 +1,5 @@
 import { app, type IpcMain, type IpcMainInvokeEvent } from 'electron'
+import { execFile } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { IPC } from './ipcChannels'
@@ -41,6 +42,14 @@ interface ClaudeAuthFile {
   }
 }
 
+interface OpenCodeStats {
+  days: number
+  totalCost: number
+  goCost: number
+  sessions: number | null
+  messages: number | null
+}
+
 interface HttpResult {
   status: number
   headers: Record<string, string>
@@ -64,12 +73,20 @@ const ACCESS_TOKEN_REFRESH_WINDOW_MS = 5 * 60 * 1000
 const CODEX_REFRESH_AGE_MS = 8 * 24 * 60 * 60 * 1000
 const CODEX_CACHE_MS = 60 * 1000
 const CLAUDE_CACHE_MS = 5 * 60 * 1000
+const OPENCODE_CACHE_MS = 60 * 1000
 const FORCE_REFRESH_FLOOR_MS = 15 * 1000
 const HTTP_TIMEOUT_MS = 10 * 1000
 const REFRESH_TIMEOUT_MS = 15 * 1000
+const OPENCODE_STATS_TIMEOUT_MS = 20 * 1000
 const MAX_RESPONSE_BYTES = 256 * 1024
+const OPENCODE_GO_LIMITS = [
+  { id: 'opencode:five_hour', label: '5 saat', days: 5 / 24, limitUsd: 12, periodMs: 5 * 60 * 60 * 1000 },
+  { id: 'opencode:weekly', label: 'Haftalık', days: 7, limitUsd: 30, periodMs: 7 * 24 * 60 * 60 * 1000 },
+  { id: 'opencode:monthly', label: 'Aylık', days: 30, limitUsd: 60, periodMs: 30 * 24 * 60 * 60 * 1000 }
+] as const
 
 const cache = new Map<string, CacheEntry>()
+const ANSI_RE = /\x1b\[[0-?]*[ -/]*[@-~]/g
 
 function homePath(...parts: string[]): string {
   return path.join(app.getPath('home'), ...parts)
@@ -142,6 +159,21 @@ function claudeAuthCandidates(): { path: string; kind: AuthSourceKind }[] {
   return candidates
 }
 
+function opencodeAuthCandidates(): { path: string; kind: AuthSourceKind }[] {
+  const candidates: { path: string; kind: AuthSourceKind }[] = []
+  if (process.env.OPENCODE_DATA_DIR) {
+    candidates.push({ path: path.join(process.env.OPENCODE_DATA_DIR, 'auth.json'), kind: 'global' })
+  }
+  if (process.env.XDG_DATA_HOME) {
+    candidates.push({ path: path.join(process.env.XDG_DATA_HOME, 'opencode', 'auth.json'), kind: 'global' })
+  }
+  candidates.push(
+    { path: homePath('.local', 'share', 'opencode', 'auth.json'), kind: 'global' },
+    { path: homePath('.local', 'share', 'opencode', 'account.json'), kind: 'global' }
+  )
+  return candidates
+}
+
 function hasCodexOAuth(auth: CodexAuth): boolean {
   return !!auth.tokens?.access_token
 }
@@ -150,15 +182,29 @@ function hasClaudeOAuth(auth: ClaudeAuthFile): boolean {
   return !!auth.claudeAiOauth?.accessToken
 }
 
+function findExistingOpenCodeSource(): AuthSource<Record<string, never>> | null {
+  for (const candidate of opencodeAuthCandidates()) {
+    if (existsSync(candidate.path)) {
+      return { auth: {}, path: candidate.path, kind: candidate.kind }
+    }
+  }
+  return null
+}
+
 function emptyTool(
-  tool: 'codex' | 'claude',
+  tool: AiToolLimit['tool'],
   status: AiToolLimit['status'],
   detail: string,
   source?: Pick<AiToolLimit, 'source'>
 ): AiToolLimit {
+  const labels: Record<AiToolLimit['tool'], string> = {
+    codex: 'Codex',
+    claude: 'Claude',
+    opencode: 'OpenCode'
+  }
   return {
     tool,
-    label: tool === 'codex' ? 'Codex' : 'Claude',
+    label: labels[tool],
     status,
     detail,
     windows: [],
@@ -442,6 +488,193 @@ function formatClaudePlan(data: Record<string, unknown>, oauth: ClaudeAuthFile['
 
   const multiplier = firstMultiplier(values)
   return multiplier ? `${plan} ${multiplier}` : plan
+}
+
+function opencodeCommands(): string[] {
+  const commands: string[] = []
+  if (process.env.OPENCODE_BIN?.trim()) commands.push(process.env.OPENCODE_BIN.trim())
+  commands.push('opencode')
+  return [...new Set(commands)]
+}
+
+function runOpenCodeCommand(command: string, args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const isWindowsShellCommand =
+      process.platform === 'win32' && !command.toLowerCase().endsWith('.exe')
+    const executable = isWindowsShellCommand ? process.env.ComSpec || 'cmd.exe' : command
+    const commandArgs = isWindowsShellCommand ? ['/d', '/s', '/c', command, ...args] : args
+
+    execFile(
+      executable,
+      commandArgs,
+      {
+        timeout: OPENCODE_STATS_TIMEOUT_MS,
+        maxBuffer: MAX_RESPONSE_BYTES,
+        windowsHide: true
+      },
+      (error, stdout, stderr) => {
+        if (error) {
+          reject(new Error(stderr?.trim() || error.message))
+          return
+        }
+        resolve(stdout)
+      }
+    )
+  })
+}
+
+async function runOpenCodeStats(days: number): Promise<string> {
+  const args = ['stats', '--days', String(days), '--models', '100', '--tools', '1']
+  let lastError: unknown = null
+  for (const command of opencodeCommands()) {
+    try {
+      return await runOpenCodeCommand(command, args)
+    } catch (err) {
+      lastError = err
+    }
+  }
+  throw new Error(
+    lastError instanceof Error && lastError.message
+      ? `opencode stats çalıştırılamadı: ${lastError.message}`
+      : 'opencode stats çalıştırılamadı.'
+  )
+}
+
+function cleanStatsLine(line: string): string {
+  return line
+    .replace(ANSI_RE, '')
+    .replace(/[┌┐└┘├┤┬┴─]+/g, ' ')
+    .replace(/│/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ')
+}
+
+function readCurrency(value: string): number | null {
+  const match = value.match(/\$([0-9]+(?:\.[0-9]+)?)/)
+  if (!match) return null
+  const parsed = Number(match[1])
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function readCount(value: string): number | null {
+  const digits = value.replace(/\D/g, '')
+  if (!digits) return null
+  const parsed = Number(digits)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function parseOpenCodeStats(output: string, days: number): OpenCodeStats {
+  let totalCost = 0
+  let goCost = 0
+  let sessions: number | null = null
+  let messages: number | null = null
+  let currentModel: string | null = null
+
+  for (const rawLine of output.split(/\r?\n/)) {
+    const line = cleanStatsLine(rawLine)
+    if (!line) continue
+
+    if (line.startsWith('Sessions ')) {
+      sessions = readCount(line.slice('Sessions '.length))
+      continue
+    }
+    if (line.startsWith('Messages ')) {
+      messages = readCount(line.slice('Messages '.length))
+      continue
+    }
+    if (line.startsWith('Total Cost ')) {
+      totalCost = readCurrency(line) ?? totalCost
+      continue
+    }
+    if (/^[\w.-]+\/\S+$/.test(line)) {
+      currentModel = line
+      continue
+    }
+    if (currentModel?.startsWith('opencode-go/') && line.startsWith('Cost ')) {
+      goCost += readCurrency(line) ?? 0
+    }
+  }
+
+  return { days, totalCost, goCost, sessions, messages }
+}
+
+function formatUsd(value: number): string {
+  return `$${Math.max(0, value).toFixed(2)}`
+}
+
+function statsWindow(
+  id: string,
+  label: string,
+  usedUsd: number,
+  limitUsd: number,
+  periodMs: number
+): AiLimitWindow {
+  const usedPercent = clampPercent((usedUsd / limitUsd) * 100)
+  return {
+    id,
+    label,
+    usedPercent,
+    remainingPercent: clampPercent(100 - usedPercent),
+    periodDurationMs: periodMs,
+    resetsAt: null
+  }
+}
+
+async function readOpenCodeLimits(): Promise<AiToolLimit> {
+  const source = findExistingOpenCodeSource()
+  const sourceMeta = source ? sourceFields(source) : { source: 'global' as const }
+
+  try {
+    const stats = await Promise.all(
+      OPENCODE_GO_LIMITS.map(async (limit) => ({
+        limit,
+        stats: parseOpenCodeStats(await runOpenCodeStats(limit.days), limit.days)
+      }))
+    )
+
+    const windows = stats.map(({ limit, stats: item }) =>
+      statsWindow(limit.id, limit.label, item.goCost, limit.limitUsd, limit.periodMs)
+    )
+    const fiveHour = stats[0]?.stats
+    const weekly = stats[1]?.stats
+    const monthly = stats[2]?.stats
+    const monthlyTotal = monthly?.totalCost ?? 0
+    const monthlyGo = monthly?.goCost ?? 0
+
+    const metrics: AiLimitMetric[] = [
+      { label: '5 saat', value: `${formatUsd(fiveHour?.goCost ?? 0)} / $12` },
+      { label: 'Haftalık', value: `${formatUsd(weekly?.goCost ?? 0)} / $30` },
+      { label: 'Aylık', value: `${formatUsd(monthlyGo)} / $60` }
+    ]
+    if (monthly?.messages !== null && monthly?.messages !== undefined) {
+      metrics.push({ label: '30 gün mesaj', value: monthly.messages.toLocaleString('tr-TR') })
+    }
+    if (monthlyTotal > monthlyGo) {
+      metrics.push({ label: '30 gün toplam', value: formatUsd(monthlyTotal) })
+    }
+
+    return {
+      tool: 'opencode',
+      label: 'OpenCode',
+      status: 'ready',
+      detail:
+        monthlyGo > 0
+          ? 'OpenCode Go kotası yerel stats maliyetinden hesaplandı.'
+          : 'OpenCode Go kullanımı görünmüyor; diğer sağlayıcı maliyetleri limit barına eklenmedi.',
+      windows,
+      metrics,
+      updatedAt: Date.now(),
+      planType: 'OpenCode Go · $12/5s · $30/hafta · $60/ay',
+      ...sourceMeta
+    }
+  } catch (err) {
+    return emptyTool(
+      'opencode',
+      'unavailable',
+      err instanceof Error ? err.message : String(err),
+      source ? sourceFields(source) : undefined
+    )
+  }
 }
 
 function parseCodexUsage(response: HttpResult, source: AuthSource<CodexAuth>): AiToolLimit {
@@ -783,12 +1016,13 @@ export function registerAiLimitHandlers(ipcMain: IpcMain): void {
   ipcMain.handle(IPC.AI_LIMITS_GET, async (event: IpcMainInvokeEvent, request: unknown) => {
     assertTrustedIpcSender(event)
     const payload = cleanRequest(request)
-    const [codex, claude] = await Promise.all([
+    const [codex, claude, opencode] = await Promise.all([
       cachedTool('codex:global', CODEX_CACHE_MS, !!payload.force, () => readCodexLimits()),
-      cachedTool('claude:global', CLAUDE_CACHE_MS, !!payload.force, () => readClaudeLimits())
+      cachedTool('claude:global', CLAUDE_CACHE_MS, !!payload.force, () => readClaudeLimits()),
+      cachedTool('opencode:global', OPENCODE_CACHE_MS, !!payload.force, () => readOpenCodeLimits())
     ])
     return {
-      tools: [codex, claude],
+      tools: [codex, claude, opencode],
       lastUpdated: Date.now()
     } satisfies AiLimitsOverview
   })

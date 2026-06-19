@@ -18,5 +18,5 @@ export interface AppUpdateStatus {
 
 export const INITIAL_UPDATE_STATUS: AppUpdateStatus = {
   state: 'idle',
-  message: 'Güncelleme hazır'
+  message: 'Güncelleme denetlenmedi'
 }
