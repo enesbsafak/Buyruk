@@ -28,7 +28,6 @@ export function DbStructure({ connectionId, table, onTreeChanged, onTableRemoved
 
   useEffect(() => {
     let cancelled = false
-    setError(null)
     Promise.all([
       window.api.db.getColumns(connectionId, table.schema, table.name),
       window.api.db.getIndexes(connectionId, table.schema, table.name)
@@ -37,6 +36,7 @@ export function DbStructure({ connectionId, table, onTreeChanged, onTableRemoved
         if (cancelled) return
         setColumns(cols)
         setIndexes(idx)
+        setError(null)
       })
       .catch((err) => {
         if (!cancelled) setError(errMsg(err))

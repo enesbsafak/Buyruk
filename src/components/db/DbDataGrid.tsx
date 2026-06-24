@@ -168,7 +168,6 @@ export function DbDataGrid({ connectionId, table }: DbDataGridProps) {
   const [offset, setOffset] = useState(0)
   const [order, setOrder] = useState<Order | null>(null)
   const [nonce, setNonce] = useState(0)
-  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -182,8 +181,6 @@ export function DbDataGrid({ connectionId, table }: DbDataGridProps) {
 
   useEffect(() => {
     let cancelled = false
-    setLoading(true)
-    setError(null)
     window.api.db
       .getRows(connectionId, table.schema, table.name, {
         limit: LIMIT,
@@ -192,13 +189,13 @@ export function DbDataGrid({ connectionId, table }: DbDataGridProps) {
         orderDir: order?.dir
       })
       .then((res) => {
-        if (!cancelled) setData(res)
+        if (!cancelled) {
+          setData(res)
+          setError(null)
+        }
       })
       .catch((err) => {
         if (!cancelled) setError(errMsg(err))
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
       })
     return () => {
       cancelled = true
@@ -345,7 +342,7 @@ export function DbDataGrid({ connectionId, table }: DbDataGridProps) {
       {error ? (
         <div className="db-error">{error}</div>
       ) : !data ? (
-        <p className="db-empty db-view-empty">{loading ? 'Yükleniyor…' : ''}</p>
+        <p className="db-empty db-view-empty">Yükleniyor…</p>
       ) : (
         <div className="db-grid-wrap">
           <table className="db-grid">
