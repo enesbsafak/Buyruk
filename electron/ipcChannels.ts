@@ -34,6 +34,30 @@ export const IPC = {
   // AI usage limits
   AI_LIMITS_GET: 'aiLimits:get',
 
+  // PostgreSQL panel
+  DB_LIST_CONNECTIONS: 'db:listConnections',
+  DB_SAVE_CONNECTION: 'db:saveConnection',
+  DB_DELETE_CONNECTION: 'db:deleteConnection',
+  DB_CONNECT: 'db:connect',
+  DB_DISCONNECT: 'db:disconnect',
+  DB_ACTIVE_CONNECTIONS: 'db:activeConnections',
+  DB_LIST_SCHEMAS: 'db:listSchemas',
+  DB_LIST_TABLES: 'db:listTables',
+  DB_GET_COLUMNS: 'db:getColumns',
+  DB_GET_INDEXES: 'db:getIndexes',
+  DB_GET_ROWS: 'db:getRows',
+  DB_RUN_QUERY: 'db:runQuery',
+  DB_INSERT_ROW: 'db:insertRow',
+  DB_UPDATE_ROW: 'db:updateRow',
+  DB_DELETE_ROW: 'db:deleteRow',
+  DB_CREATE_TABLE: 'db:createTable',
+  DB_DROP_TABLE: 'db:dropTable',
+  DB_TRUNCATE_TABLE: 'db:truncateTable',
+  DB_ADD_COLUMN: 'db:addColumn',
+  DB_DROP_COLUMN: 'db:dropColumn',
+  DB_CREATE_INDEX: 'db:createIndex',
+  DB_DROP_INDEX: 'db:dropIndex',
+
   // Terminal
   CREATE_TERMINAL: 'term:create',
   RESTART_TERMINAL: 'term:restart',

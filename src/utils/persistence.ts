@@ -2,6 +2,7 @@ import type { TerminalType } from '../types'
 
 const SESSIONS_KEY = 'multicli.sessions'
 const RECENTS_KEY = 'multicli.recents'
+const PANEL_SIZE_PREFIX = 'multicli.panel.'
 const MAX_RECENTS = 8
 
 export interface SavedSession {
@@ -38,6 +39,27 @@ export function loadRecents(): RecentFolder[] {
     return raw ? (JSON.parse(raw) as RecentFolder[]) : []
   } catch {
     return []
+  }
+}
+
+// Remember a draggable panel divider position (px) so the layout is restored on
+// next launch instead of resetting to its default size.
+export function loadPanelSize(key: string, fallback: number): number {
+  try {
+    const raw = localStorage.getItem(PANEL_SIZE_PREFIX + key)
+    if (raw === null) return fallback
+    const value = Number(raw)
+    return Number.isFinite(value) && value > 0 ? value : fallback
+  } catch {
+    return fallback
+  }
+}
+
+export function savePanelSize(key: string, size: number): void {
+  try {
+    localStorage.setItem(PANEL_SIZE_PREFIX + key, String(Math.round(size)))
+  } catch {
+    // ignore
   }
 }
 

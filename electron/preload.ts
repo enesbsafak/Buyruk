@@ -1,7 +1,21 @@
 import { clipboard, contextBridge, ipcRenderer } from 'electron'
 import { IPC } from './ipcChannels'
 import type { AppUpdateStatus } from '../src/updateTypes'
-import type { AiLimitsOverview, AiLimitsRequest, GitOverview } from '../src/types'
+import type {
+  AiLimitsOverview,
+  AiLimitsRequest,
+  DbActiveConnection,
+  DbColumn,
+  DbColumnDef,
+  DbConnectResult,
+  DbConnectionInput,
+  DbIndex,
+  DbResultSet,
+  DbRowsResult,
+  DbTable,
+  GitOverview,
+  SavedDbConnection
+} from '../src/types'
 
 export interface FileNode {
   name: string
@@ -98,6 +112,86 @@ const api = {
   aiLimits: {
     get: (request?: AiLimitsRequest): Promise<AiLimitsOverview> =>
       ipcRenderer.invoke(IPC.AI_LIMITS_GET, request)
+  },
+
+  // ---- PostgreSQL panel ----
+  db: {
+    listConnections: (): Promise<SavedDbConnection[]> =>
+      ipcRenderer.invoke(IPC.DB_LIST_CONNECTIONS),
+    saveConnection: (input: DbConnectionInput, id?: string): Promise<SavedDbConnection[]> =>
+      ipcRenderer.invoke(IPC.DB_SAVE_CONNECTION, input, id),
+    deleteConnection: (id: string): Promise<SavedDbConnection[]> =>
+      ipcRenderer.invoke(IPC.DB_DELETE_CONNECTION, id),
+    connect: (payload: { savedId?: string; input?: DbConnectionInput }): Promise<DbConnectResult> =>
+      ipcRenderer.invoke(IPC.DB_CONNECT, payload),
+    disconnect: (connectionId: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.DB_DISCONNECT, connectionId),
+    activeConnections: (): Promise<DbActiveConnection[]> =>
+      ipcRenderer.invoke(IPC.DB_ACTIVE_CONNECTIONS),
+    listSchemas: (connectionId: string): Promise<string[]> =>
+      ipcRenderer.invoke(IPC.DB_LIST_SCHEMAS, connectionId),
+    listTables: (connectionId: string, schema: string): Promise<DbTable[]> =>
+      ipcRenderer.invoke(IPC.DB_LIST_TABLES, connectionId, schema),
+    getColumns: (connectionId: string, schema: string, table: string): Promise<DbColumn[]> =>
+      ipcRenderer.invoke(IPC.DB_GET_COLUMNS, connectionId, schema, table),
+    getIndexes: (connectionId: string, schema: string, table: string): Promise<DbIndex[]> =>
+      ipcRenderer.invoke(IPC.DB_GET_INDEXES, connectionId, schema, table),
+    getRows: (
+      connectionId: string,
+      schema: string,
+      table: string,
+      opts: { limit: number; offset: number; orderBy?: string | null; orderDir?: 'ASC' | 'DESC' }
+    ): Promise<DbRowsResult> =>
+      ipcRenderer.invoke(IPC.DB_GET_ROWS, connectionId, schema, table, opts),
+    runQuery: (connectionId: string, sql: string): Promise<DbResultSet> =>
+      ipcRenderer.invoke(IPC.DB_RUN_QUERY, connectionId, sql),
+    insertRow: (
+      connectionId: string,
+      schema: string,
+      table: string,
+      values: Record<string, string | null>
+    ): Promise<void> => ipcRenderer.invoke(IPC.DB_INSERT_ROW, connectionId, schema, table, values),
+    updateRow: (
+      connectionId: string,
+      schema: string,
+      table: string,
+      pk: Record<string, string | null>,
+      changes: Record<string, string | null>
+    ): Promise<void> =>
+      ipcRenderer.invoke(IPC.DB_UPDATE_ROW, connectionId, schema, table, pk, changes),
+    deleteRow: (
+      connectionId: string,
+      schema: string,
+      table: string,
+      pk: Record<string, string | null>
+    ): Promise<void> => ipcRenderer.invoke(IPC.DB_DELETE_ROW, connectionId, schema, table, pk),
+    createTable: (
+      connectionId: string,
+      schema: string,
+      name: string,
+      columns: DbColumnDef[]
+    ): Promise<void> =>
+      ipcRenderer.invoke(IPC.DB_CREATE_TABLE, connectionId, schema, name, columns),
+    dropTable: (connectionId: string, schema: string, table: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.DB_DROP_TABLE, connectionId, schema, table),
+    truncateTable: (connectionId: string, schema: string, table: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.DB_TRUNCATE_TABLE, connectionId, schema, table),
+    addColumn: (
+      connectionId: string,
+      schema: string,
+      table: string,
+      column: DbColumnDef
+    ): Promise<void> => ipcRenderer.invoke(IPC.DB_ADD_COLUMN, connectionId, schema, table, column),
+    dropColumn: (connectionId: string, schema: string, table: string, column: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.DB_DROP_COLUMN, connectionId, schema, table, column),
+    createIndex: (
+      connectionId: string,
+      schema: string,
+      table: string,
+      input: { name: string; columns: string[]; unique: boolean }
+    ): Promise<void> => ipcRenderer.invoke(IPC.DB_CREATE_INDEX, connectionId, schema, table, input),
+    dropIndex: (connectionId: string, schema: string, name: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.DB_DROP_INDEX, connectionId, schema, name)
   },
 
   // ---- Clipboard ----

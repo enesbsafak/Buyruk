@@ -33,7 +33,7 @@ export default defineConfig({
             // `external` here keeps node-pty's native .node binaries out of the
             // bundle so they load from node_modules (app.asar.unpacked) at runtime.
             rolldownOptions: {
-              external: ['node-pty', 'electron-updater']
+              external: ['node-pty', 'electron-updater', 'pg']
             }
           }
         }

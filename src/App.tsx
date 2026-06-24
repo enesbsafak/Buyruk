@@ -135,6 +135,7 @@ interface UiState {
   gitPanelOpen: boolean
   quickOpenOpen: boolean
   paletteOpen: boolean
+  dbOpen: boolean
   updateStatus: AppUpdateStatus
 }
 
@@ -149,6 +150,7 @@ type UiAction =
   | { type: 'toggle-git-panel' }
   | { type: 'set-quick-open'; open: boolean }
   | { type: 'set-palette-open'; open: boolean }
+  | { type: 'set-db-open'; open: boolean }
   | { type: 'set-update-status'; status: AppUpdateStatus }
 
 function createInitialUiState(): UiState {
@@ -163,6 +165,7 @@ function createInitialUiState(): UiState {
     gitPanelOpen: false,
     quickOpenOpen: false,
     paletteOpen: false,
+    dbOpen: false,
     updateStatus: INITIAL_UPDATE_STATUS
   }
 }
@@ -189,6 +192,8 @@ function uiReducer(state: UiState, action: UiAction): UiState {
       return { ...state, quickOpenOpen: action.open }
     case 'set-palette-open':
       return { ...state, paletteOpen: action.open }
+    case 'set-db-open':
+      return { ...state, dbOpen: action.open }
     case 'set-update-status':
       return { ...state, updateStatus: action.status }
   }
@@ -216,6 +221,7 @@ interface UseCommandListOptions {
   onCloneRepo: () => void
   onBroadcastPrompt: () => void
   onUpdateAiTools: () => void
+  onOpenDatabase: () => void
   onSaveFile: () => void
   onCloseActive: () => void
   onRestart: (session: SessionRuntime) => void
@@ -233,6 +239,7 @@ function useCommandList({
   onCloneRepo,
   onBroadcastPrompt,
   onUpdateAiTools,
+  onOpenDatabase,
   onSaveFile,
   onCloseActive,
   onRestart,
@@ -250,6 +257,7 @@ function useCommandList({
       { id: 'open-folder', label: 'Klasör Aç (workspace değiştir)', icon: 'folder', run: onOpenFolder },
       { id: 'new-folder', label: 'Yeni Klasör', icon: 'folder-plus', run: onNewFolder },
       { id: 'clone-repo', label: "GitHub'dan Klonla", icon: 'download', run: onCloneRepo },
+      { id: 'database', label: 'Veritabanı (PostgreSQL)', icon: 'database', run: onOpenDatabase },
       { id: 'update-ai-tools', label: 'AI Araçlarını Güncelle', icon: 'refresh', run: onUpdateAiTools },
       { id: 'quick-open', label: 'Hızlı Dosya Aç', hint: 'Ctrl+P', icon: 'search', run: () => activeSession && dispatchUi({ type: 'set-quick-open', open: true }) },
       { id: 'save', label: 'Dosyayı Kaydet', hint: 'Ctrl+S', icon: 'save', run: onSaveFile },
@@ -278,6 +286,7 @@ function useCommandList({
     onCloneRepo,
     onBroadcastPrompt,
     onUpdateAiTools,
+    onOpenDatabase,
     onSaveFile,
     onCloseActive,
     onRestart,
@@ -1080,6 +1089,7 @@ function useAppModel() {
     gitPanelOpen,
     quickOpenOpen,
     paletteOpen,
+    dbOpen,
     updateStatus
   } = ui
   const restoredRef = useRef(false)
@@ -1099,6 +1109,8 @@ function useAppModel() {
   )
   const toggleBroadcast = useCallback(() => dispatchUi({ type: 'toggle-broadcast' }), [])
   const toggleGitPanel = useCallback(() => dispatchUi({ type: 'toggle-git-panel' }), [])
+  const openDatabase = useCallback(() => dispatchUi({ type: 'set-db-open', open: true }), [])
+  const closeDatabase = useCallback(() => dispatchUi({ type: 'set-db-open', open: false }), [])
   const closeQuickOpen = useCallback(() => dispatchUi({ type: 'set-quick-open', open: false }), [])
   const closePalette = useCallback(() => dispatchUi({ type: 'set-palette-open', open: false }), [])
   const closeSettings = useCallback(
@@ -1285,6 +1297,7 @@ function useAppModel() {
     onCloneRepo: handleCloneRepo,
     onBroadcastPrompt: handleBroadcastPrompt,
     onUpdateAiTools: handleUpdateAiTools,
+    onOpenDatabase: openDatabase,
     onSaveFile: saveActiveFile,
     onCloseActive: handleCloseActive,
     onRestart: handleRestart,
@@ -1336,6 +1349,9 @@ function useAppModel() {
     handleSaveSettings,
     handleSelectFile,
     openSettings,
+    openDatabase,
+    closeDatabase,
+    dbOpen,
     paletteOpen,
     quickOpenOpen,
     recents,

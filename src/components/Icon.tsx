@@ -30,6 +30,11 @@ export type IconName =
   | 'win-minimize'
   | 'win-maximize'
   | 'win-restore'
+  | 'database'
+  | 'table'
+  | 'play'
+  | 'key'
+  | 'power'
 
 // One cohesive, consistently-weighted icon set (1.6px stroke, 24px grid).
 // Replaces emoji so the UI reads as a real product, not a prototype.
@@ -132,6 +137,32 @@ const PATHS: Record<IconName, JSX.Element> = {
     <>
       <rect x="8" y="8" width="11" height="11" rx="1.5" />
       <path d="M5 16V6a1 1 0 0 1 1-1h10" />
+    </>
+  ),
+  database: (
+    <>
+      <ellipse cx="12" cy="5" rx="8" ry="3" />
+      <path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5" />
+      <path d="M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3" />
+    </>
+  ),
+  table: (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M3 9.5h18M9 4v16" />
+    </>
+  ),
+  play: <path d="M8 5.5v13l11-6.5z" />,
+  key: (
+    <>
+      <circle cx="8" cy="15" r="4" />
+      <path d="m10.9 12.1 8-8M16.5 5.5 19 8M14 8l2.2 2.2" />
+    </>
+  ),
+  power: (
+    <>
+      <path d="M12 4v8" />
+      <path d="M7.5 7.6a7 7 0 1 0 9 0" />
     </>
   )
 }

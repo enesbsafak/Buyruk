@@ -16,6 +16,7 @@ interface ToolbarProps {
   recents: RecentFolder[]
   onOpenRecent: (recent: RecentFolder) => void
   onUpdateAiTools: () => void
+  onOpenDatabase: () => void
   activeSession: SessionRuntime | null
 }
 
@@ -37,6 +38,7 @@ export function Toolbar({
   recents,
   onOpenRecent,
   onUpdateAiTools,
+  onOpenDatabase,
   activeSession
 }: ToolbarProps) {
   const [maximized, setMaximized] = useState(false)
@@ -144,6 +146,10 @@ export function Toolbar({
       <button type="button" className="btn btn-ghost toolbar-action no-drag" title="GitHub'dan Klonla" onClick={onCloneRepo}>
         <Icon name="download" />
         <span className="toolbar-label">Klonla</span>
+      </button>
+      <button type="button" className="btn btn-ghost toolbar-action no-drag" title="Veritabanı (PostgreSQL)" onClick={onOpenDatabase}>
+        <Icon name="database" />
+        <span className="toolbar-label">Veritabanı</span>
       </button>
 
       <div className="toolbar-spacer" />

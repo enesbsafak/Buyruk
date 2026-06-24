@@ -1,6 +1,7 @@
 import { CommandPalette, type Command } from './CommandPalette'
 import { QuickOpen } from './QuickOpen'
 import { SettingsModal } from './SettingsModal'
+import { DatabasePanel } from './DatabasePanel'
 import type { SessionRuntime, Settings } from '../types'
 
 interface AppOverlaysProps {
@@ -16,6 +17,8 @@ interface AppOverlaysProps {
   onClosePalette: () => void
   onSaveSettings: (settings: Settings) => void
   onCloseSettings: () => void
+  dbOpen: boolean
+  onCloseDatabase: () => void
 }
 
 export function AppOverlays({
@@ -30,7 +33,9 @@ export function AppOverlays({
   onCloseQuickOpen,
   onClosePalette,
   onSaveSettings,
-  onCloseSettings
+  onCloseSettings,
+  dbOpen,
+  onCloseDatabase
 }: AppOverlaysProps) {
   return (
     <>
@@ -51,6 +56,8 @@ export function AppOverlays({
         onSave={onSaveSettings}
         onClose={onCloseSettings}
       />
+
+      <DatabasePanel open={dbOpen} onClose={onCloseDatabase} />
     </>
   )
 }

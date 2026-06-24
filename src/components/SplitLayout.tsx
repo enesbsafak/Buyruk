@@ -1,4 +1,5 @@
 import { useEffect, useReducer, useRef, type ReactNode } from 'react'
+import { loadPanelSize, savePanelSize } from '../utils/persistence'
 
 interface SplitLayoutProps {
   direction: 'horizontal' | 'vertical'
@@ -11,6 +12,8 @@ interface SplitLayoutProps {
    * window resizes instead of growing to eat the screen.
    */
   anchor?: 'first' | 'second'
+  /** When set, the dragged size is remembered in localStorage under this key. */
+  storageKey?: string
   children: [ReactNode, ReactNode]
 }
 
@@ -20,14 +23,23 @@ export function SplitLayout({
   initial,
   min = 150,
   anchor = 'first',
+  storageKey,
   children
 }: SplitLayoutProps) {
-  const [size, setSize] = useReducer((_size: number, nextSize: number) => nextSize, initial)
+  const [size, setSize] = useReducer(
+    (_size: number, nextSize: number) => nextSize,
+    storageKey ? loadPanelSize(storageKey, initial) : initial
+  )
   const containerRef = useRef<HTMLDivElement>(null)
   const dragging = useRef(false)
   const isHorizontal = direction === 'horizontal'
   const layoutRef = useRef({ isHorizontal, min, anchor })
   layoutRef.current = { isHorizontal, min, anchor }
+  // Live refs so the once-bound stopDrag handler can persist the latest size.
+  const sizeRef = useRef(size)
+  sizeRef.current = size
+  const storageKeyRef = useRef(storageKey)
+  storageKeyRef.current = storageKey
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -49,6 +61,9 @@ export function SplitLayout({
     }
 
     const stopDrag = () => {
+      if (dragging.current && storageKeyRef.current) {
+        savePanelSize(storageKeyRef.current, sizeRef.current)
+      }
       dragging.current = false
       document.body.style.cursor = ''
       document.body.style.userSelect = ''

@@ -2,10 +2,20 @@ import type {
   CreateTerminalOptions,
   AiLimitsOverview,
   AiLimitsRequest,
+  DbActiveConnection,
+  DbColumn,
+  DbColumnDef,
+  DbConnectResult,
+  DbConnectionInput,
+  DbIndex,
+  DbResultSet,
+  DbRowsResult,
+  DbTable,
   FileNode,
   GitBranches,
   GitFileSides,
   GitOverview,
+  SavedDbConnection,
   TerminalSession
 } from './types'
 import type { AppUpdateStatus } from './updateTypes'
@@ -47,6 +57,63 @@ declare global {
       // AI usage limits
       aiLimits: {
         get(request?: AiLimitsRequest): Promise<AiLimitsOverview>
+      }
+
+      // PostgreSQL panel
+      db: {
+        listConnections(): Promise<SavedDbConnection[]>
+        saveConnection(input: DbConnectionInput, id?: string): Promise<SavedDbConnection[]>
+        deleteConnection(id: string): Promise<SavedDbConnection[]>
+        connect(payload: { savedId?: string; input?: DbConnectionInput }): Promise<DbConnectResult>
+        disconnect(connectionId: string): Promise<void>
+        activeConnections(): Promise<DbActiveConnection[]>
+        listSchemas(connectionId: string): Promise<string[]>
+        listTables(connectionId: string, schema: string): Promise<DbTable[]>
+        getColumns(connectionId: string, schema: string, table: string): Promise<DbColumn[]>
+        getIndexes(connectionId: string, schema: string, table: string): Promise<DbIndex[]>
+        getRows(
+          connectionId: string,
+          schema: string,
+          table: string,
+          opts: { limit: number; offset: number; orderBy?: string | null; orderDir?: 'ASC' | 'DESC' }
+        ): Promise<DbRowsResult>
+        runQuery(connectionId: string, sql: string): Promise<DbResultSet>
+        insertRow(
+          connectionId: string,
+          schema: string,
+          table: string,
+          values: Record<string, string | null>
+        ): Promise<void>
+        updateRow(
+          connectionId: string,
+          schema: string,
+          table: string,
+          pk: Record<string, string | null>,
+          changes: Record<string, string | null>
+        ): Promise<void>
+        deleteRow(
+          connectionId: string,
+          schema: string,
+          table: string,
+          pk: Record<string, string | null>
+        ): Promise<void>
+        createTable(
+          connectionId: string,
+          schema: string,
+          name: string,
+          columns: DbColumnDef[]
+        ): Promise<void>
+        dropTable(connectionId: string, schema: string, table: string): Promise<void>
+        truncateTable(connectionId: string, schema: string, table: string): Promise<void>
+        addColumn(connectionId: string, schema: string, table: string, column: DbColumnDef): Promise<void>
+        dropColumn(connectionId: string, schema: string, table: string, column: string): Promise<void>
+        createIndex(
+          connectionId: string,
+          schema: string,
+          table: string,
+          input: { name: string; columns: string[]; unique: boolean }
+        ): Promise<void>
+        dropIndex(connectionId: string, schema: string, name: string): Promise<void>
       }
       gitClone(options: {
         url: string

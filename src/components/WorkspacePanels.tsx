@@ -117,7 +117,13 @@ export function WorkspacePanels({
 
   return (
     <div className="main">
-      <SplitLayout direction="horizontal" initial={sidebarInitial} min={200} anchor="second">
+      <SplitLayout
+        direction="horizontal"
+        initial={sidebarInitial}
+        min={200}
+        anchor="second"
+        storageKey="main-sidebar"
+      >
         <TerminalArea
           sessions={sessions}
           activeId={activeId}
@@ -151,7 +157,7 @@ export function WorkspacePanels({
             </button>
           </div>
           <div className="workspace-sidebar-body">
-            <SplitLayout direction="vertical" initial={320} min={120}>
+            <SplitLayout direction="vertical" initial={320} min={120} storageKey="sidebar-explorer">
               <FileExplorer
                 rootPath={activeSession?.cwd ?? null}
                 hiddenFolders={settings.hiddenFolders}
@@ -163,7 +169,7 @@ export function WorkspacePanels({
                 onRefresh={onRefresh}
               />
               {gitPanel.open ? (
-                <SplitLayout direction="vertical" initial={280} min={120}>
+                <SplitLayout direction="vertical" initial={280} min={120} storageKey="git-editor">
                   {gitDock}
                   {editor}
                 </SplitLayout>

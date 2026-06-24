@@ -61,6 +61,9 @@ interface AppViewProps {
   handleSaveSettings: (settings: Settings) => void
   handleSelectFile: (path: string) => void
   openSettings: () => void
+  openDatabase: () => void
+  closeDatabase: () => void
+  dbOpen: boolean
   paletteOpen: boolean
   quickOpenOpen: boolean
   recents: RecentFolder[]
@@ -120,6 +123,9 @@ export function AppView({
   handleSaveSettings,
   handleSelectFile,
   openSettings,
+  openDatabase,
+  closeDatabase,
+  dbOpen,
   paletteOpen,
   quickOpenOpen,
   recents,
@@ -178,6 +184,7 @@ export function AppView({
         recents={recents}
         onOpenRecent={handleOpenRecent}
         onUpdateAiTools={handleUpdateAiTools}
+        onOpenDatabase={openDatabase}
         activeSession={activeSession}
       />
 
@@ -239,6 +246,8 @@ export function AppView({
         onClosePalette={closePalette}
         onSaveSettings={handleSaveSettings}
         onCloseSettings={closeSettings}
+        dbOpen={dbOpen}
+        onCloseDatabase={closeDatabase}
       />
     </div>
   )

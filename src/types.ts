@@ -153,6 +153,96 @@ export interface GitOverview {
   lastUpdated: number
 }
 
+// ---- PostgreSQL panel ----
+
+// Full connection details. `password` only ever travels renderer → main; it is
+// stored encrypted (safeStorage) and never returned to the renderer.
+export interface DbConnectionInput {
+  label: string
+  host: string
+  port: number
+  database: string
+  user: string
+  password: string
+  ssl: boolean
+}
+
+// A saved connection as exposed to the renderer — never includes the password.
+export interface SavedDbConnection {
+  id: string
+  label: string
+  host: string
+  port: number
+  database: string
+  user: string
+  ssl: boolean
+  hasPassword: boolean
+}
+
+// Result of opening a live connection. `connectionId` is a runtime handle used
+// for all subsequent queries.
+export interface DbConnectResult {
+  connectionId: string
+  serverVersion: string
+  database: string
+  user: string
+  host: string
+}
+
+export interface DbActiveConnection {
+  connectionId: string
+  label: string
+  database: string
+  user: string
+  host: string
+}
+
+export interface DbColumn {
+  name: string
+  dataType: string
+  nullable: boolean
+  default: string | null
+  isPrimaryKey: boolean
+}
+
+export interface DbIndex {
+  name: string
+  definition: string
+  isPrimary: boolean
+  isUnique: boolean
+}
+
+export interface DbTable {
+  schema: string
+  name: string
+  kind: 'table' | 'view'
+  estimatedRows: number | null
+}
+
+// A generic result set (SQL console / table browse). `rows` is row-major: each
+// row is an array aligned to `columns`. Values are JSON-serialized for display.
+export interface DbResultSet {
+  columns: string[]
+  rows: (string | null)[][]
+  rowCount: number
+  command: string
+  durationMs: number
+}
+
+export interface DbRowsResult extends DbResultSet {
+  total: number
+  primaryKey: string[]
+}
+
+// One column definition used by the create-table / add-column DDL forms.
+export interface DbColumnDef {
+  name: string
+  dataType: string
+  nullable: boolean
+  default: string
+  primaryKey: boolean
+}
+
 export type ThemeName = 'dark' | 'light'
 
 export interface Settings {
