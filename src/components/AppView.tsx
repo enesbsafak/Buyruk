@@ -5,7 +5,6 @@ import { WorkspacePanels } from './WorkspacePanels'
 import { WelcomeScreen } from './WelcomeScreen'
 import { AppOverlays } from './AppOverlays'
 import type { Command } from './CommandPalette'
-import type { OrchestratorConfig } from '../orchestrator'
 import type { RecentFolder } from '../utils/persistence'
 import type { AppUpdateStatus } from '../updateTypes'
 import type {
@@ -22,7 +21,6 @@ interface AppViewProps {
   activeId: string | null
   activeSession: SessionRuntime | null
   broadcast: boolean
-  closeOrchestrator: () => void
   closePalette: () => void
   closeQuickOpen: () => void
   closeSettings: () => void
@@ -58,17 +56,11 @@ interface AppViewProps {
   handleCloneRepo: () => void
   handleOpenTerminalHere: (cwd: string, type: TerminalType) => void
   handleRenameSession: (session: SessionRuntime) => void
-  handleResetOrchestrator: () => void
   handleRefreshGit: () => void
   handleRestart: (session: SessionRuntime) => void
-  handleSaveOrchestrator: (config: OrchestratorConfig) => void
   handleSaveSettings: (settings: Settings) => void
   handleSelectFile: (path: string) => void
-  openOrchestrator: () => void
   openSettings: () => void
-  orchestratorConfig: OrchestratorConfig
-  orchestratorOpen: boolean
-  orchestratorSummary: string
   paletteOpen: boolean
   quickOpenOpen: boolean
   recents: RecentFolder[]
@@ -88,7 +80,6 @@ export function AppView({
   activeId,
   activeSession,
   broadcast,
-  closeOrchestrator,
   closePalette,
   closeQuickOpen,
   closeSettings,
@@ -124,17 +115,11 @@ export function AppView({
   handleCloneRepo,
   handleOpenTerminalHere,
   handleRenameSession,
-  handleResetOrchestrator,
   handleRefreshGit,
   handleRestart,
-  handleSaveOrchestrator,
   handleSaveSettings,
   handleSelectFile,
-  openOrchestrator,
   openSettings,
-  orchestratorConfig,
-  orchestratorOpen,
-  orchestratorSummary,
   paletteOpen,
   quickOpenOpen,
   recents,
@@ -190,11 +175,9 @@ export function AppView({
         onNewFolder={handleNewFolder}
         onCloneRepo={handleCloneRepo}
         onOpenSettings={openSettings}
-        onOpenOrchestrator={openOrchestrator}
         recents={recents}
         onOpenRecent={handleOpenRecent}
         onUpdateAiTools={handleUpdateAiTools}
-        orchestratorEnabled={orchestratorConfig.enabled}
         activeSession={activeSession}
       />
 
@@ -239,9 +222,6 @@ export function AppView({
         statusMessage={statusMessage}
         gitBranch={gitStatus.isRepo ? gitStatus.branch : null}
         updateStatus={updateStatus}
-        orchestratorSummary={orchestratorSummary}
-        orchestratorEnabled={orchestratorConfig.enabled}
-        onOpenOrchestrator={openOrchestrator}
         onCheckForUpdates={handleCheckForUpdates}
         onInstallUpdate={handleInstallUpdate}
       />
@@ -252,16 +232,11 @@ export function AppView({
         hiddenFolders={settings.hiddenFolders}
         commands={commands}
         paletteOpen={paletteOpen}
-        orchestratorOpen={orchestratorOpen}
         settingsOpen={settingsOpen}
         settings={settings}
-        orchestratorConfig={orchestratorConfig}
         onPickFile={handleOpenFile}
         onCloseQuickOpen={closeQuickOpen}
         onClosePalette={closePalette}
-        onSaveOrchestrator={handleSaveOrchestrator}
-        onResetOrchestrator={handleResetOrchestrator}
-        onCloseOrchestrator={closeOrchestrator}
         onSaveSettings={handleSaveSettings}
         onCloseSettings={closeSettings}
       />

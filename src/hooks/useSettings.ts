@@ -9,6 +9,7 @@ export const DEFAULT_SETTINGS: Settings = {
   claudeCommand: 'claude',
   codexCommand: 'codex',
   opencodeCommand: 'opencode',
+  antigravityCommand: 'agy',
   defaultProjectDir: '',
   hiddenFolders: ['node_modules', '.git', 'dist', 'build'],
   // A Nerd Font first so CLI glyphs (claude/codex/starship) render; plain fallbacks after.

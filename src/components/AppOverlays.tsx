@@ -1,8 +1,6 @@
 import { CommandPalette, type Command } from './CommandPalette'
-import { OrchestratorModal } from './OrchestratorModal'
 import { QuickOpen } from './QuickOpen'
 import { SettingsModal } from './SettingsModal'
-import type { OrchestratorConfig } from '../orchestrator'
 import type { SessionRuntime, Settings } from '../types'
 
 interface AppOverlaysProps {
@@ -11,16 +9,11 @@ interface AppOverlaysProps {
   hiddenFolders: string[]
   commands: Command[]
   paletteOpen: boolean
-  orchestratorOpen: boolean
   settingsOpen: boolean
   settings: Settings
-  orchestratorConfig: OrchestratorConfig
   onPickFile: (path: string) => void
   onCloseQuickOpen: () => void
   onClosePalette: () => void
-  onSaveOrchestrator: (config: OrchestratorConfig) => void
-  onResetOrchestrator: () => void
-  onCloseOrchestrator: () => void
   onSaveSettings: (settings: Settings) => void
   onCloseSettings: () => void
 }
@@ -31,16 +24,11 @@ export function AppOverlays({
   hiddenFolders,
   commands,
   paletteOpen,
-  orchestratorOpen,
   settingsOpen,
   settings,
-  orchestratorConfig,
   onPickFile,
   onCloseQuickOpen,
   onClosePalette,
-  onSaveOrchestrator,
-  onResetOrchestrator,
-  onCloseOrchestrator,
   onSaveSettings,
   onCloseSettings
 }: AppOverlaysProps) {
@@ -56,14 +44,6 @@ export function AppOverlays({
       )}
 
       {paletteOpen && <CommandPalette commands={commands} onClose={onClosePalette} />}
-
-      <OrchestratorModal
-        open={orchestratorOpen}
-        config={orchestratorConfig}
-        onSave={onSaveOrchestrator}
-        onReset={onResetOrchestrator}
-        onClose={onCloseOrchestrator}
-      />
 
       <SettingsModal
         open={settingsOpen}

@@ -104,6 +104,16 @@ function SettingsModalContent({
         </label>
 
         <label className="field">
+          <span className="field-label">Antigravity komutu</span>
+          <input
+            className="field-input"
+            value={draft.antigravityCommand}
+            onChange={(e) => set('antigravityCommand', e.target.value)}
+            placeholder="agy"
+          />
+        </label>
+
+        <label className="field">
           <span className="field-label">Varsayılan proje klasörü</span>
           <div className="field-with-button">
             <input

@@ -6,7 +6,8 @@ const TERMINAL_LABELS: Record<TerminalType, string> = {
   powershell: 'PowerShell',
   claude: 'Claude',
   codex: 'Codex',
-  opencode: 'OpenCode'
+  opencode: 'OpenCode',
+  antigravity: 'Antigravity'
 }
 
 // Build a session/tab title: "Claude · projem".

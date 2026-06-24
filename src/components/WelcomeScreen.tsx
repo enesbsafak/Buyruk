@@ -17,7 +17,8 @@ const CLI_STARTERS: { type: TerminalType; label: string }[] = [
   { type: 'powershell', label: 'PowerShell' },
   { type: 'claude', label: 'Claude' },
   { type: 'codex', label: 'Codex' },
-  { type: 'opencode', label: 'OpenCode' }
+  { type: 'opencode', label: 'OpenCode' },
+  { type: 'antigravity', label: 'Antigravity' }
 ]
 
 export function WelcomeScreen({

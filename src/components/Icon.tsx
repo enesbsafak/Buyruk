@@ -25,7 +25,6 @@ export type IconName =
   | 'expand'
   | 'collapse'
   | 'broadcast'
-  | 'orchestrator'
   | 'git-diff'
   | 'download'
   | 'win-minimize'
@@ -112,14 +111,6 @@ const PATHS: Record<IconName, JSX.Element> = {
     <>
       <circle cx="12" cy="12" r="2" />
       <path d="M7.5 7.5a6 6 0 0 0 0 9M16.5 7.5a6 6 0 0 1 0 9M4.7 4.7a10 10 0 0 0 0 14.6M19.3 4.7a10 10 0 0 1 0 14.6" />
-    </>
-  ),
-  orchestrator: (
-    <>
-      <circle cx="12" cy="5" r="2.5" />
-      <circle cx="6" cy="17" r="2.5" />
-      <circle cx="18" cy="17" r="2.5" />
-      <path d="M10.9 7.2 7.1 14.8M13.1 7.2l3.8 7.6M8.5 17h7" />
     </>
   ),
   'git-diff': (

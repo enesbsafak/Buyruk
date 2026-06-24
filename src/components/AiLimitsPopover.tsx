@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { Icon } from './Icon'
-import type { AiLimitWindow, AiLimitsOverview, AiToolLimit } from '../types'
+import { CliIcon } from './CliIcon'
+import type { AiLimitTool, AiLimitWindow, AiLimitsOverview, AiToolLimit } from '../types'
 
 interface AiLimitsPopoverProps {
   overview: AiLimitsOverview | null
@@ -117,6 +119,15 @@ function ToolLimitCard({ item }: { item: AiToolLimit }) {
 }
 
 export function AiLimitsPopover({ overview, loading, error, onRefresh }: AiLimitsPopoverProps) {
+  const [selected, setSelected] = useState<AiLimitTool | null>(null)
+  const tools = overview?.tools ?? []
+  // Effective selection: the clicked tab, else the first ready provider, else the first.
+  const activeTool =
+    tools.find((item) => item.tool === selected) ??
+    tools.find((item) => item.status === 'ready') ??
+    tools[0] ??
+    null
+
   return (
     <section className="ai-limits-panel">
       <div className="ai-limits-head">
@@ -134,11 +145,33 @@ export function AiLimitsPopover({ overview, loading, error, onRefresh }: AiLimit
       {loading && !overview && <div className="ai-limit-loading">Limitler okunuyor...</div>}
 
       {overview && (
-        <div className="ai-limits-body">
-          {overview.tools.map((item) => (
-            <ToolLimitCard key={item.tool} item={item} />
-          ))}
-        </div>
+        <>
+          <div className="ai-limit-tabs" role="tablist" aria-label="Sağlayıcılar">
+            {tools.map((item) => {
+              const isActive = activeTool?.tool === item.tool
+              return (
+                <button
+                  key={item.tool}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  className={`ai-limit-tab ${isActive ? 'is-active' : ''}`}
+                  title={`${item.label} · ${statusText(item.status)}`}
+                  onClick={() => setSelected(item.tool)}
+                >
+                  <CliIcon type={item.tool} size={20} />
+                  <span className={`ai-limit-tab-dot ${item.status}`} aria-hidden="true" />
+                </button>
+              )
+            })}
+          </div>
+
+          {activeTool && (
+            <div className="ai-limits-body">
+              <ToolLimitCard item={activeTool} />
+            </div>
+          )}
+        </>
       )}
     </section>
   )

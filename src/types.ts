@@ -1,9 +1,9 @@
-export type TerminalType = 'cmd' | 'powershell' | 'claude' | 'codex' | 'opencode'
+export type TerminalType = 'cmd' | 'powershell' | 'claude' | 'codex' | 'opencode' | 'antigravity'
 
 // CLI types with AI-specific behavior (used by aiLimits and CLI-type logic).
-export type CliKind = 'claude' | 'codex' | 'opencode'
+export type CliKind = 'claude' | 'codex' | 'opencode' | 'antigravity'
 
-export type AiLimitTool = 'codex' | 'claude' | 'opencode'
+export type AiLimitTool = 'codex' | 'claude' | 'opencode' | 'antigravity'
 export type AiLimitStatus = 'ready' | 'unavailable' | 'error'
 export type AiLimitSource = 'global' | 'none'
 
@@ -43,7 +43,7 @@ export interface AiLimitsRequest {
 }
 
 export function isCliKind(type: TerminalType): type is CliKind {
-  return type === 'claude' || type === 'codex' || type === 'opencode'
+  return type === 'claude' || type === 'codex' || type === 'opencode' || type === 'antigravity'
 }
 
 export interface TerminalSession {
@@ -161,6 +161,7 @@ export interface Settings {
   claudeCommand: string
   codexCommand: string
   opencodeCommand: string
+  antigravityCommand: string
   defaultProjectDir: string
   hiddenFolders: string[]
   terminalFont: string

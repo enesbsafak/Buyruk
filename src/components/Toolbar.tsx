@@ -13,11 +13,9 @@ interface ToolbarProps {
   onNewFolder: () => void
   onCloneRepo: () => void
   onOpenSettings: () => void
-  onOpenOrchestrator: () => void
   recents: RecentFolder[]
   onOpenRecent: (recent: RecentFolder) => void
   onUpdateAiTools: () => void
-  orchestratorEnabled: boolean
   activeSession: SessionRuntime | null
 }
 
@@ -26,7 +24,8 @@ const NEW_BUTTONS: { type: TerminalType; label: string }[] = [
   { type: 'powershell', label: 'PowerShell' },
   { type: 'claude', label: 'Claude' },
   { type: 'codex', label: 'Codex' },
-  { type: 'opencode', label: 'OpenCode' }
+  { type: 'opencode', label: 'OpenCode' },
+  { type: 'antigravity', label: 'Antigravity' }
 ]
 
 export function Toolbar({
@@ -35,11 +34,9 @@ export function Toolbar({
   onNewFolder,
   onCloneRepo,
   onOpenSettings,
-  onOpenOrchestrator,
   recents,
   onOpenRecent,
   onUpdateAiTools,
-  orchestratorEnabled,
   activeSession
 }: ToolbarProps) {
   const [maximized, setMaximized] = useState(false)
@@ -154,7 +151,7 @@ export function Toolbar({
       <button
         type="button"
         className="btn btn-ghost toolbar-action no-drag"
-        title="Codex, Claude ve OpenCode araçlarını güncelle"
+        title="Codex, Claude, OpenCode ve Antigravity araçlarını güncelle"
         onClick={onUpdateAiTools}
       >
         <Icon name="refresh" size={15} />
@@ -180,14 +177,6 @@ export function Toolbar({
           </div>
         )}
       </div>
-      <button
-        type="button"
-        className={`icon-btn no-drag ${orchestratorEnabled ? 'is-on' : ''}`}
-        title={orchestratorEnabled ? 'AI orkestrasyon açık' : 'AI orkestrasyon'}
-        onClick={onOpenOrchestrator}
-      >
-        <Icon name="orchestrator" size={17} />
-      </button>
       <button type="button" className="icon-btn no-drag" title="Ayarlar" onClick={onOpenSettings}>
         <Icon name="settings" size={17} />
       </button>

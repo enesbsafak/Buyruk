@@ -25,7 +25,7 @@ async function getPty(): Promise<typeof PtyType> {
   return ptyLib
 }
 
-export type TerminalType = 'cmd' | 'powershell' | 'claude' | 'codex' | 'opencode'
+export type TerminalType = 'cmd' | 'powershell' | 'claude' | 'codex' | 'opencode' | 'antigravity'
 
 export interface CreateTerminalOptions {
   type: TerminalType
@@ -49,15 +49,24 @@ const TYPE_LABEL: Record<TerminalType, string> = {
   powershell: 'PowerShell',
   claude: 'Claude',
   codex: 'Codex',
-  opencode: 'OpenCode'
+  opencode: 'OpenCode',
+  antigravity: 'Antigravity'
 }
-const TERMINAL_TYPES = new Set<TerminalType>(['cmd', 'powershell', 'claude', 'codex', 'opencode'])
+const TERMINAL_TYPES = new Set<TerminalType>([
+  'cmd',
+  'powershell',
+  'claude',
+  'codex',
+  'opencode',
+  'antigravity'
+])
 const DEFAULT_COMMAND: Record<TerminalType, string> = {
   cmd: 'cmd.exe',
   powershell: 'powershell.exe',
   claude: 'claude',
   codex: 'codex',
-  opencode: 'opencode'
+  opencode: 'opencode',
+  antigravity: 'agy'
 }
 const MAX_COMMAND_LENGTH = 2048
 const MAX_TERMINAL_DIMENSION = 500
@@ -165,6 +174,7 @@ export class TerminalManager {
         return { file: comspec, args: ['/k', options.command || 'claude'] }
       case 'codex':
       case 'opencode':
+      case 'antigravity':
         return { file: comspec, args: ['/k', options.command] }
       default:
         return { file: comspec, args: [] }

@@ -4,9 +4,7 @@ import type { Command } from './components/CommandPalette'
 import { useDialog } from './components/DialogProvider'
 import { useSessions } from './hooks/useSessions'
 import { useSettings } from './hooks/useSettings'
-import { useOrchestrator } from './hooks/useOrchestrator'
 import { terminalBus } from './terminalBus'
-import { describeOrchestratorConfig } from './orchestrator'
 import { getLanguage, isImageFile } from './utils/language'
 import { basename, joinPath } from './utils/pathUtils'
 import { sessionTitle } from './utils/sessionTitle'
@@ -51,7 +49,8 @@ const EMPTY_GIT_OVERVIEW: GitOverview = {
 const AI_TOOL_UPDATES = [
   { label: 'Codex', command: 'codex update' },
   { label: 'Claude', command: 'claude update' },
-  { label: 'OpenCode', command: 'opencode upgrade' }
+  { label: 'OpenCode', command: 'opencode upgrade' },
+  { label: 'Antigravity', command: 'agy update' }
 ] as const
 
 function commandFor(type: TerminalType, settings: Settings): string {
@@ -66,6 +65,8 @@ function commandFor(type: TerminalType, settings: Settings): string {
       return settings.codexCommand
     case 'opencode':
       return settings.opencodeCommand
+    case 'antigravity':
+      return settings.antigravityCommand
   }
 }
 
@@ -103,7 +104,12 @@ function buildSubmittedTerminalPayload(session: SessionRuntime, data: string): s
   const prompt = data.slice(0, -1)
   if (!prompt) return ['\r']
 
-  if (session.type === 'claude' || session.type === 'codex' || session.type === 'opencode') {
+  if (
+    session.type === 'claude' ||
+    session.type === 'codex' ||
+    session.type === 'opencode' ||
+    session.type === 'antigravity'
+  ) {
     const pasted = `\x1b[200~${normalizePromptText(prompt)}\x1b[201~`
     return session.type === 'codex' ? [pasted, '\r', '\r'] : [pasted, '\r']
   }
@@ -129,7 +135,6 @@ interface UiState {
   gitPanelOpen: boolean
   quickOpenOpen: boolean
   paletteOpen: boolean
-  orchestratorOpen: boolean
   updateStatus: AppUpdateStatus
 }
 
@@ -144,7 +149,6 @@ type UiAction =
   | { type: 'toggle-git-panel' }
   | { type: 'set-quick-open'; open: boolean }
   | { type: 'set-palette-open'; open: boolean }
-  | { type: 'set-orchestrator-open'; open: boolean }
   | { type: 'set-update-status'; status: AppUpdateStatus }
 
 function createInitialUiState(): UiState {
@@ -159,7 +163,6 @@ function createInitialUiState(): UiState {
     gitPanelOpen: false,
     quickOpenOpen: false,
     paletteOpen: false,
-    orchestratorOpen: false,
     updateStatus: INITIAL_UPDATE_STATUS
   }
 }
@@ -186,8 +189,6 @@ function uiReducer(state: UiState, action: UiAction): UiState {
       return { ...state, quickOpenOpen: action.open }
     case 'set-palette-open':
       return { ...state, paletteOpen: action.open }
-    case 'set-orchestrator-open':
-      return { ...state, orchestratorOpen: action.open }
     case 'set-update-status':
       return { ...state, updateStatus: action.status }
   }
@@ -214,7 +215,6 @@ interface UseCommandListOptions {
   onNewFolder: () => void
   onCloneRepo: () => void
   onBroadcastPrompt: () => void
-  onOpenOrchestrator: () => void
   onUpdateAiTools: () => void
   onSaveFile: () => void
   onCloseActive: () => void
@@ -232,7 +232,6 @@ function useCommandList({
   onNewFolder,
   onCloneRepo,
   onBroadcastPrompt,
-  onOpenOrchestrator,
   onUpdateAiTools,
   onSaveFile,
   onCloseActive,
@@ -247,10 +246,10 @@ function useCommandList({
       { id: 'new-claude', label: 'Yeni Claude', icon: 'terminal', run: () => onNewTerminal('claude') },
       { id: 'new-codex', label: 'Yeni Codex', icon: 'terminal', run: () => onNewTerminal('codex') },
       { id: 'new-opencode', label: 'Yeni OpenCode', icon: 'terminal', run: () => onNewTerminal('opencode') },
+      { id: 'new-antigravity', label: 'Yeni Antigravity', icon: 'terminal', run: () => onNewTerminal('antigravity') },
       { id: 'open-folder', label: 'Klasör Aç (workspace değiştir)', icon: 'folder', run: onOpenFolder },
       { id: 'new-folder', label: 'Yeni Klasör', icon: 'folder-plus', run: onNewFolder },
       { id: 'clone-repo', label: "GitHub'dan Klonla", icon: 'download', run: onCloneRepo },
-      { id: 'orchestrator', label: 'AI Orkestrasyon', icon: 'orchestrator', run: onOpenOrchestrator },
       { id: 'update-ai-tools', label: 'AI Araçlarını Güncelle', icon: 'refresh', run: onUpdateAiTools },
       { id: 'quick-open', label: 'Hızlı Dosya Aç', hint: 'Ctrl+P', icon: 'search', run: () => activeSession && dispatchUi({ type: 'set-quick-open', open: true }) },
       { id: 'save', label: 'Dosyayı Kaydet', hint: 'Ctrl+S', icon: 'save', run: onSaveFile },
@@ -278,7 +277,6 @@ function useCommandList({
     onNewFolder,
     onCloneRepo,
     onBroadcastPrompt,
-    onOpenOrchestrator,
     onUpdateAiTools,
     onSaveFile,
     onCloseActive,
@@ -1068,11 +1066,6 @@ function useFileController({
 function useAppModel() {
   const dialog = useDialog()
   const { settings, update: updateSettings } = useSettings()
-  const {
-    config: orchestratorConfig,
-    update: updateOrchestrator,
-    reset: resetOrchestrator
-  } = useOrchestrator(settings)
   const { sessions, activeId, activeSession, actions } = useSessions()
 
   const [ui, dispatchUi] = useReducer(uiReducer, undefined, createInitialUiState)
@@ -1087,7 +1080,6 @@ function useAppModel() {
     gitPanelOpen,
     quickOpenOpen,
     paletteOpen,
-    orchestratorOpen,
     updateStatus
   } = ui
   const restoredRef = useRef(false)
@@ -1101,10 +1093,6 @@ function useAppModel() {
   activeSessionRef.current = activeSession
 
   const bumpExplorer = useCallback(() => dispatchUi({ type: 'bump-explorer' }), [])
-  const openOrchestrator = useCallback(
-    () => dispatchUi({ type: 'set-orchestrator-open', open: true }),
-    []
-  )
   const openSettings = useCallback(
     () => dispatchUi({ type: 'set-settings-open', open: true }),
     []
@@ -1113,10 +1101,6 @@ function useAppModel() {
   const toggleGitPanel = useCallback(() => dispatchUi({ type: 'toggle-git-panel' }), [])
   const closeQuickOpen = useCallback(() => dispatchUi({ type: 'set-quick-open', open: false }), [])
   const closePalette = useCallback(() => dispatchUi({ type: 'set-palette-open', open: false }), [])
-  const closeOrchestrator = useCallback(
-    () => dispatchUi({ type: 'set-orchestrator-open', open: false }),
-    []
-  )
   const closeSettings = useCallback(
     () => dispatchUi({ type: 'set-settings-open', open: false }),
     []
@@ -1291,27 +1275,6 @@ function useAppModel() {
     [dialog, updateSettings]
   )
 
-  const handleSaveOrchestrator = useCallback(
-    (next: typeof orchestratorConfig) => {
-      updateOrchestrator(next)
-      dispatchUi({ type: 'set-orchestrator-open', open: false })
-      dispatchUi({ type: 'set-status-message', message: 'AI orkestrasyon kaydedildi' })
-      dialog.notify('AI orkestrasyon kaydedildi', 'success')
-    },
-    [dialog, updateOrchestrator]
-  )
-
-  const handleResetOrchestrator = useCallback(() => {
-    resetOrchestrator()
-    dispatchUi({ type: 'set-status-message', message: 'AI orkestrasyon varsayılana döndü' })
-    dialog.notify('AI orkestrasyon varsayılana döndü', 'info')
-  }, [dialog, resetOrchestrator])
-
-  const orchestratorSummary = useMemo(
-    () => describeOrchestratorConfig(orchestratorConfig),
-    [orchestratorConfig]
-  )
-
   const commands = useCommandList({
     activeSession,
     broadcast,
@@ -1321,7 +1284,6 @@ function useAppModel() {
     onNewFolder: handleNewFolder,
     onCloneRepo: handleCloneRepo,
     onBroadcastPrompt: handleBroadcastPrompt,
-    onOpenOrchestrator: openOrchestrator,
     onUpdateAiTools: handleUpdateAiTools,
     onSaveFile: saveActiveFile,
     onCloseActive: handleCloseActive,
@@ -1334,7 +1296,6 @@ function useAppModel() {
     activeId,
     activeSession,
     broadcast,
-    closeOrchestrator,
     closePalette,
     closeQuickOpen,
     closeSettings,
@@ -1370,17 +1331,11 @@ function useAppModel() {
     handleCloneRepo,
     handleOpenTerminalHere,
     handleRenameSession,
-    handleResetOrchestrator,
     handleRefreshGit,
     handleRestart,
-    handleSaveOrchestrator,
     handleSaveSettings,
     handleSelectFile,
-    openOrchestrator,
     openSettings,
-    orchestratorConfig,
-    orchestratorOpen,
-    orchestratorSummary,
     paletteOpen,
     quickOpenOpen,
     recents,

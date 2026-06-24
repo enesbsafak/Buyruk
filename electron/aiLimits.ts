@@ -74,6 +74,7 @@ const CODEX_REFRESH_AGE_MS = 8 * 24 * 60 * 60 * 1000
 const CODEX_CACHE_MS = 60 * 1000
 const CLAUDE_CACHE_MS = 5 * 60 * 1000
 const OPENCODE_CACHE_MS = 60 * 1000
+const ANTIGRAVITY_CACHE_MS = 5 * 60 * 1000
 const FORCE_REFRESH_FLOOR_MS = 15 * 1000
 const HTTP_TIMEOUT_MS = 10 * 1000
 const REFRESH_TIMEOUT_MS = 15 * 1000
@@ -200,7 +201,8 @@ function emptyTool(
   const labels: Record<AiToolLimit['tool'], string> = {
     codex: 'Codex',
     claude: 'Claude',
-    opencode: 'OpenCode'
+    opencode: 'OpenCode',
+    antigravity: 'Antigravity'
   }
   return {
     tool,
@@ -1005,6 +1007,28 @@ async function cachedTool(
   return tool
 }
 
+// Antigravity (agy) ships no public usage/quota API and no `stats` subcommand, and
+// its consumer Google OAuth credentials aren't kept in a readable token file. We can
+// detect a local session but can't read real limit numbers, so we surface a clear
+// "unavailable" card instead of inventing data.
+function antigravityLoggedIn(): boolean {
+  return [homePath('.gemini', 'antigravity-cli'), homePath('.antigravitycli')].some((dir) =>
+    existsSync(dir)
+  )
+}
+
+async function readAntigravityLimits(): Promise<AiToolLimit> {
+  const loggedIn = antigravityLoggedIn()
+  return emptyTool(
+    'antigravity',
+    'unavailable',
+    loggedIn
+      ? 'Antigravity kullanım/limit verisi sunmuyor; oturum bulundu ama kota okunamıyor.'
+      : 'Antigravity oturumu bulunamadı.',
+    loggedIn ? { source: 'global' } : undefined
+  )
+}
+
 function cleanRequest(value: unknown): AiLimitsRequest {
   const input = readObject(value) ?? {}
   return {
@@ -1016,13 +1040,16 @@ export function registerAiLimitHandlers(ipcMain: IpcMain): void {
   ipcMain.handle(IPC.AI_LIMITS_GET, async (event: IpcMainInvokeEvent, request: unknown) => {
     assertTrustedIpcSender(event)
     const payload = cleanRequest(request)
-    const [codex, claude, opencode] = await Promise.all([
+    const [codex, claude, opencode, antigravity] = await Promise.all([
       cachedTool('codex:global', CODEX_CACHE_MS, !!payload.force, () => readCodexLimits()),
       cachedTool('claude:global', CLAUDE_CACHE_MS, !!payload.force, () => readClaudeLimits()),
-      cachedTool('opencode:global', OPENCODE_CACHE_MS, !!payload.force, () => readOpenCodeLimits())
+      cachedTool('opencode:global', OPENCODE_CACHE_MS, !!payload.force, () => readOpenCodeLimits()),
+      cachedTool('antigravity:global', ANTIGRAVITY_CACHE_MS, !!payload.force, () =>
+        readAntigravityLimits()
+      )
     ])
     return {
-      tools: [codex, claude, opencode],
+      tools: [codex, claude, opencode, antigravity],
       lastUpdated: Date.now()
     } satisfies AiLimitsOverview
   })

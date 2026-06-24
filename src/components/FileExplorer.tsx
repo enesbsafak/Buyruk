@@ -247,7 +247,9 @@ function FileExplorerContent({
     items.push({
       label: 'Burada terminal aç',
       icon: 'terminal',
-      submenu: (['cmd', 'powershell', 'claude', 'codex', 'opencode'] as TerminalType[]).map((t) => ({
+      submenu: (
+        ['cmd', 'powershell', 'claude', 'codex', 'opencode', 'antigravity'] as TerminalType[]
+      ).map((t) => ({
         label:
           t === 'cmd'
             ? 'CMD'
@@ -257,7 +259,9 @@ function FileExplorerContent({
                 ? 'Claude'
                 : t === 'codex'
                   ? 'Codex'
-                  : 'OpenCode',
+                  : t === 'opencode'
+                    ? 'OpenCode'
+                    : 'Antigravity',
         icon: 'terminal',
         onClick: () => onOpenTerminalHere(dir, t)
       }))
