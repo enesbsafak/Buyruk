@@ -178,16 +178,14 @@ export function useXtermSession({
 
     // GPU rendering; falls back to the DOM renderer if the context is
     // unavailable or is lost later (driver reset, GPU process crash).
-    let webgl: WebglAddon | null = null
+    // Never dispose this manually: term.dispose() disposes loaded addons, and
+    // disposing twice throws while the pane is unmounting.
     try {
-      webgl = new WebglAddon()
-      webgl.onContextLoss(() => {
-        webgl?.dispose()
-        webgl = null
-      })
+      const webgl = new WebglAddon()
+      webgl.onContextLoss(() => webgl.dispose())
       term.loadAddon(webgl)
     } catch {
-      webgl = null
+      // WebGL unavailable; the DOM renderer stays in place.
     }
 
     try {
@@ -288,7 +286,11 @@ export function useXtermSession({
       onScroll.dispose()
       unsubscribe()
       resizeObserver.disconnect()
-      webgl?.dispose()
+      // Clear the refs first: a stray callback must not reach a disposed terminal.
+      termRef.current = null
+      fitRef.current = null
+      searchRef.current = null
+      serializeRef.current = null
       term.dispose()
     }
   }, [hostRef, notifyScrollState, pasteFromClipboard, pushSize, session.gen, session.id, session.type])

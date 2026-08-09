@@ -2161,6 +2161,69 @@ dialog.modal::backdrop {
   opacity: 0.4;
   cursor: not-allowed;
 }
+/* ---------- Crash screen ---------- */
+.crash-screen {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 24px;
+  background: var(--bg-0);
+}
+.crash-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 620px;
+  width: 100%;
+  padding: 22px;
+  background: var(--bg-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+.crash-icon {
+  color: var(--danger);
+}
+.crash-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+.crash-text {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.crash-detail {
+  margin: 0;
+  padding: 10px 12px;
+  max-height: 220px;
+  overflow: auto;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--danger);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.crash-more summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  margin-bottom: 8px;
+}
+.crash-more .crash-detail {
+  color: var(--text-dim);
+}
+.crash-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .field-check {
   flex-direction: row;
   align-items: start;
