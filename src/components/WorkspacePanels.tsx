@@ -42,8 +42,10 @@ interface WorkspacePanelsProps {
   onCloseSession: (id: string) => void
   onRestart: (session: SessionRuntime) => void
   onRenameSession: (session: SessionRuntime) => void
+  onReorderSessions: (from: number, to: number) => void
   onInput: (id: string, data: string) => void
   onBell: (id: string) => void
+  onCwdChange: (id: string, cwd: string) => void
   onToggleBroadcast: () => void
   onOpenFile: (path: string) => void
   onOpenTerminalHere: (cwd: string, type: TerminalType) => void
@@ -68,8 +70,10 @@ export function WorkspacePanels({
   onCloseSession,
   onRestart,
   onRenameSession,
+  onReorderSessions,
   onInput,
   onBell,
+  onCwdChange,
   onToggleBroadcast,
   onOpenFile,
   onOpenTerminalHere,
@@ -129,13 +133,17 @@ export function WorkspacePanels({
           activeId={activeId}
           fontFamily={settings.terminalFont}
           fontSize={settings.terminalFontSize}
+          scrollback={settings.terminalScrollback}
+          theme={settings.theme}
           broadcast={broadcast}
           onSelect={onSelectSession}
           onClose={onCloseSession}
           onRestart={onRestart}
           onRename={onRenameSession}
+          onReorder={onReorderSessions}
           onInput={onInput}
           onBell={onBell}
+          onCwdChange={onCwdChange}
           onToggleBroadcast={onToggleBroadcast}
         />
 

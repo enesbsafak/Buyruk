@@ -15,6 +15,8 @@ export const DEFAULT_SETTINGS: Settings = {
   // A Nerd Font first so CLI glyphs (claude/codex/starship) render; plain fallbacks after.
   terminalFont: '"JetBrainsMono NF", "Cascadia Code", Consolas, monospace',
   terminalFontSize: 13,
+  terminalScrollback: 8000,
+  trackShellCwd: true,
   theme: 'dark'
 }
 

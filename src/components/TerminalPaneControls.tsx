@@ -10,11 +10,14 @@ interface TerminalPaneHeaderProps {
   exited: boolean
   showSearch: boolean
   zoomed: boolean
+  canZoom: boolean
   onRename: (session: SessionRuntime) => void
   onRestart: (session: SessionRuntime) => void
   onToggleZoom: (id: string) => void
   onClose: (id: string) => void
   onToggleSearch: () => void
+  onDragStart: () => void
+  onDragEnd: () => void
 }
 
 export function TerminalPaneHeader({
@@ -22,18 +25,29 @@ export function TerminalPaneHeader({
   exited,
   showSearch,
   zoomed,
+  canZoom,
   onRename,
   onRestart,
   onToggleZoom,
   onClose,
-  onToggleSearch
+  onToggleSearch,
+  onDragStart,
+  onDragEnd
 }: TerminalPaneHeaderProps) {
   return (
-    <div className="pane-head">
+    <div
+      className="pane-head"
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = 'move'
+        onDragStart()
+      }}
+      onDragEnd={onDragEnd}
+    >
       <CliIcon type={session.type} size={15} />
       <span
         className="pane-title"
-        title={`${session.cwd}  ·  başlığı değiştirmek için çift tıkla`}
+        title={`${session.cwd}  ·  başlığı değiştirmek için çift tıkla, sürükleyerek yerini değiştir`}
         onDoubleClick={(e) => {
           e.stopPropagation()
           onRename(session)
@@ -65,17 +79,19 @@ export function TerminalPaneHeader({
         >
           <Icon name="restart" size={14} />
         </button>
-        <button
-          type="button"
-          className="pane-btn"
-          title={zoomed ? 'Küçült' : 'Büyüt'}
-          onClick={(e) => {
-            e.stopPropagation()
-            onToggleZoom(session.id)
-          }}
-        >
-          <Icon name={zoomed ? 'collapse' : 'expand'} size={14} />
-        </button>
+        {canZoom && (
+          <button
+            type="button"
+            className="pane-btn"
+            title={zoomed ? 'Küçült' : 'Büyüt'}
+            onClick={(e) => {
+              e.stopPropagation()
+              onToggleZoom(session.id)
+            }}
+          >
+            <Icon name={zoomed ? 'collapse' : 'expand'} size={14} />
+          </button>
+        )}
         <button
           type="button"
           className="pane-btn close"

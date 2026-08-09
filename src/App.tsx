@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
 import { AppView } from './components/AppView'
 import type { Command } from './components/CommandPalette'
 import { useDialog } from './components/DialogProvider'
+import { useLatestRef } from './hooks/useLatestRef'
 import { useSessions } from './hooks/useSessions'
 import { useSettings } from './hooks/useSettings'
 import { terminalBus } from './terminalBus'
+import { terminalSnapshots } from './terminalSnapshots'
 import { getLanguage, isImageFile } from './utils/language'
 import { basename, joinPath } from './utils/pathUtils'
 import { sessionTitle } from './utils/sessionTitle'
@@ -99,10 +101,13 @@ function normalizePromptText(text: string): string {
   return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
 }
 
-function buildSubmittedTerminalPayload(session: SessionRuntime, data: string): string[] {
-  if (!data.endsWith('\r') || data.length <= 1) return [data]
+// Multi-line prompts are wrapped in a bracketed-paste block so the AI CLIs treat
+// them as one paste instead of a burst of keystrokes. The whole payload goes out
+// as a single write: the main process queues it in order, so no timers are needed.
+function buildSubmittedTerminalPayload(session: SessionRuntime, data: string): string {
+  if (!data.endsWith('\r') || data.length <= 1) return data
   const prompt = data.slice(0, -1)
-  if (!prompt) return ['\r']
+  if (!prompt) return '\r'
 
   if (
     session.type === 'claude' ||
@@ -111,17 +116,15 @@ function buildSubmittedTerminalPayload(session: SessionRuntime, data: string): s
     session.type === 'antigravity'
   ) {
     const pasted = `\x1b[200~${normalizePromptText(prompt)}\x1b[201~`
-    return session.type === 'codex' ? [pasted, '\r', '\r'] : [pasted, '\r']
+    // Codex needs a second CR to submit after leaving paste mode.
+    return session.type === 'codex' ? `${pasted}\r\r` : `${pasted}\r`
   }
 
-  return [data]
+  return data
 }
 
 function writeSubmittedTerminalData(session: SessionRuntime, data: string): void {
-  const payloads = buildSubmittedTerminalPayload(session, data)
-  payloads.forEach((payload, index) => {
-    window.setTimeout(() => window.api.writeTerminal(session.id, payload), index * 35)
-  })
+  window.api.writeTerminal(session.id, buildSubmittedTerminalPayload(session, data))
 }
 
 interface UiState {
@@ -135,7 +138,6 @@ interface UiState {
   gitPanelOpen: boolean
   quickOpenOpen: boolean
   paletteOpen: boolean
-  dbOpen: boolean
   updateStatus: AppUpdateStatus
 }
 
@@ -150,7 +152,6 @@ type UiAction =
   | { type: 'toggle-git-panel' }
   | { type: 'set-quick-open'; open: boolean }
   | { type: 'set-palette-open'; open: boolean }
-  | { type: 'set-db-open'; open: boolean }
   | { type: 'set-update-status'; status: AppUpdateStatus }
 
 function createInitialUiState(): UiState {
@@ -165,7 +166,6 @@ function createInitialUiState(): UiState {
     gitPanelOpen: false,
     quickOpenOpen: false,
     paletteOpen: false,
-    dbOpen: false,
     updateStatus: INITIAL_UPDATE_STATUS
   }
 }
@@ -192,8 +192,6 @@ function uiReducer(state: UiState, action: UiAction): UiState {
       return { ...state, quickOpenOpen: action.open }
     case 'set-palette-open':
       return { ...state, paletteOpen: action.open }
-    case 'set-db-open':
-      return { ...state, dbOpen: action.open }
     case 'set-update-status':
       return { ...state, updateStatus: action.status }
   }
@@ -221,7 +219,6 @@ interface UseCommandListOptions {
   onCloneRepo: () => void
   onBroadcastPrompt: () => void
   onUpdateAiTools: () => void
-  onOpenDatabase: () => void
   onSaveFile: () => void
   onCloseActive: () => void
   onRestart: (session: SessionRuntime) => void
@@ -239,7 +236,6 @@ function useCommandList({
   onCloneRepo,
   onBroadcastPrompt,
   onUpdateAiTools,
-  onOpenDatabase,
   onSaveFile,
   onCloseActive,
   onRestart,
@@ -257,7 +253,6 @@ function useCommandList({
       { id: 'open-folder', label: 'Klasör Aç (workspace değiştir)', icon: 'folder', run: onOpenFolder },
       { id: 'new-folder', label: 'Yeni Klasör', icon: 'folder-plus', run: onNewFolder },
       { id: 'clone-repo', label: "GitHub'dan Klonla", icon: 'download', run: onCloneRepo },
-      { id: 'database', label: 'Veritabanı (PostgreSQL)', icon: 'database', run: onOpenDatabase },
       { id: 'update-ai-tools', label: 'AI Araçlarını Güncelle', icon: 'refresh', run: onUpdateAiTools },
       { id: 'quick-open', label: 'Hızlı Dosya Aç', hint: 'Ctrl+P', icon: 'search', run: () => activeSession && dispatchUi({ type: 'set-quick-open', open: true }) },
       { id: 'save', label: 'Dosyayı Kaydet', hint: 'Ctrl+S', icon: 'save', run: onSaveFile },
@@ -286,7 +281,6 @@ function useCommandList({
     onCloneRepo,
     onBroadcastPrompt,
     onUpdateAiTools,
-    onOpenDatabase,
     onSaveFile,
     onCloseActive,
     onRestart,
@@ -355,8 +349,7 @@ function useTerminalController({
   dispatchUi
 }: TerminalControllerOptions) {
   const bellThrottle = useRef<Record<string, number>>({})
-  const broadcastRef = useRef(false)
-  broadcastRef.current = broadcast
+  const broadcastRef = useLatestRef(broadcast)
 
   const handleInput = useCallback((id: string, data: string) => {
     if (broadcastRef.current) {
@@ -411,7 +404,8 @@ function useTerminalController({
           cwd,
           command: commandFor(type, settings),
           cols: 80,
-          rows: 24
+          rows: 24,
+          shellIntegration: settings.trackShellCwd
         })
         actions.add(session)
         dispatchUi({ type: 'set-status-message', message: `Açıldı: ${session.title}` })
@@ -477,7 +471,8 @@ function useTerminalController({
           cwd: session.cwd,
           command: commandFor(session.type, settings),
           cols: 80,
-          rows: 24
+          rows: 24,
+          shellIntegration: settings.trackShellCwd
         })
         dispatchUi({ type: 'set-status-message', message: `Yeniden başlatıldı: ${session.title}` })
       } catch (err) {
@@ -495,7 +490,8 @@ function useTerminalController({
         cwd,
         command: settings.powershellCommand,
         cols: 96,
-        rows: 28
+        rows: 28,
+        shellIntegration: settings.trackShellCwd
       })
       actions.add(session)
       actions.rename(session.id, 'AI Araçları Güncelle')
@@ -575,8 +571,20 @@ function useTerminalController({
     if (activeId) handleCloseSession(activeId)
   }, [activeId, handleCloseSession])
 
+  // Reported by the shell through OSC 7 — keeps the explorer on the folder the
+  // terminal actually sits in after a `cd`.
+  const handleCwdChange = useCallback(
+    (id: string, cwd: string) => {
+      const session = sessionsRef.current.find((item) => item.id === id)
+      if (!session || session.cwd.toLowerCase() === cwd.toLowerCase()) return
+      actions.setCwd(id, cwd, session.title)
+    },
+    [actions, sessionsRef]
+  )
+
   return {
     handleInput,
+    handleCwdChange,
     handleBroadcastPrompt,
     handleNewTerminal,
     handleOpenRecent,
@@ -864,7 +872,8 @@ function useFileController({
         cwd: dir,
         command: commandFor(activeSession.type, settings),
         cols: 80,
-        rows: 24
+        rows: 24,
+        shellIntegration: settings.trackShellCwd
       })
       actions.setCwd(activeSession.id, dir, title)
       actions.restart(activeSession.id)
@@ -943,8 +952,7 @@ function useFileController({
     }
   }, [activeSession, actions, dialog, dispatchUi])
 
-  const saveRef = useRef(saveActiveFile)
-  saveRef.current = saveActiveFile
+  const saveRef = useLatestRef(saveActiveFile)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
@@ -1089,18 +1097,13 @@ function useAppModel() {
     gitPanelOpen,
     quickOpenOpen,
     paletteOpen,
-    dbOpen,
     updateStatus
   } = ui
   const restoredRef = useRef(false)
   const initialSettingsRef = useRef(settings)
-  const addSessionRef = useRef(actions.add)
-  addSessionRef.current = actions.add
-
-  const sessionsRef = useRef(sessions)
-  sessionsRef.current = sessions
-  const activeSessionRef = useRef(activeSession)
-  activeSessionRef.current = activeSession
+  const addSessionRef = useLatestRef(actions.add)
+  const sessionsRef = useLatestRef(sessions)
+  const activeSessionRef = useLatestRef(activeSession)
 
   const bumpExplorer = useCallback(() => dispatchUi({ type: 'bump-explorer' }), [])
   const openSettings = useCallback(
@@ -1109,8 +1112,6 @@ function useAppModel() {
   )
   const toggleBroadcast = useCallback(() => dispatchUi({ type: 'toggle-broadcast' }), [])
   const toggleGitPanel = useCallback(() => dispatchUi({ type: 'toggle-git-panel' }), [])
-  const openDatabase = useCallback(() => dispatchUi({ type: 'set-db-open', open: true }), [])
-  const closeDatabase = useCallback(() => dispatchUi({ type: 'set-db-open', open: false }), [])
   const closeQuickOpen = useCallback(() => dispatchUi({ type: 'set-quick-open', open: false }), [])
   const closePalette = useCallback(() => dispatchUi({ type: 'set-palette-open', open: false }), [])
   const closeSettings = useCallback(
@@ -1120,6 +1121,7 @@ function useAppModel() {
 
   const {
     handleInput,
+    handleCwdChange,
     handleBroadcastPrompt,
     handleNewTerminal,
     handleOpenRecent,
@@ -1216,11 +1218,25 @@ function useAppModel() {
     document.documentElement.dataset.theme = settings.theme
   }, [settings.theme])
 
+  // Capture each terminal's visible scrollback so the next launch can replay it.
+  // Only done on shutdown — serializing on every state change would be wasteful.
+  const persistSessionsWithScrollback = useCallback(() => {
+    saveSessions(
+      sessionsRef.current.map((s) => ({
+        type: s.type,
+        cwd: s.cwd,
+        title: s.title,
+        snapshot: terminalSnapshots.capture(s.id) || undefined
+      }))
+    )
+  }, [])
+
   // Confirm before closing if there are unsaved editor changes.
   useEffect(() => {
     return window.api.windowControls.onConfirmClose(async () => {
       const hasUnsaved = hasDirtyFiles(sessionsRef.current)
       if (!hasUnsaved) {
+        persistSessionsWithScrollback()
         window.api.windowControls.doClose()
         return
       }
@@ -1230,9 +1246,18 @@ function useAppModel() {
         danger: true,
         confirmText: 'Kapat'
       })
-      if (ok) window.api.windowControls.doClose()
+      if (ok) {
+        persistSessionsWithScrollback()
+        window.api.windowControls.doClose()
+      }
     })
-  }, [dialog])
+  }, [dialog, persistSessionsWithScrollback])
+
+  // Covers shutdown paths that bypass the in-app close button (OS shutdown, quit).
+  useEffect(() => {
+    window.addEventListener('beforeunload', persistSessionsWithScrollback)
+    return () => window.removeEventListener('beforeunload', persistSessionsWithScrollback)
+  }, [persistSessionsWithScrollback])
 
   // Restore previously-open sessions once on startup; persist on every change.
   useEffect(() => {
@@ -1251,9 +1276,10 @@ function useAppModel() {
             cwd: s.cwd,
             command: commandFor(s.type, initialSettingsRef.current),
             cols: 80,
-            rows: 24
+            rows: 24,
+            shellIntegration: initialSettingsRef.current.trackShellCwd
           })
-          if (!cancelled) addSessionRef.current(session)
+          if (!cancelled) addSessionRef.current(session, s.snapshot)
         } catch {
           // folder may no longer exist; skip it
         }
@@ -1297,7 +1323,6 @@ function useAppModel() {
     onCloneRepo: handleCloneRepo,
     onBroadcastPrompt: handleBroadcastPrompt,
     onUpdateAiTools: handleUpdateAiTools,
-    onOpenDatabase: openDatabase,
     onSaveFile: saveActiveFile,
     onCloseActive: handleCloseActive,
     onRestart: handleRestart,
@@ -1324,6 +1349,7 @@ function useAppModel() {
     handleCloseActive,
     handleCloseFile,
     handleCloseSession,
+    handleCwdChange,
     handleInstallUpdate,
     handleUpdateAiTools,
     handleFetchGit,
@@ -1344,14 +1370,12 @@ function useAppModel() {
     handleCloneRepo,
     handleOpenTerminalHere,
     handleRenameSession,
+    handleReorderSessions: actions.reorder,
     handleRefreshGit,
     handleRestart,
     handleSaveSettings,
     handleSelectFile,
     openSettings,
-    openDatabase,
-    closeDatabase,
-    dbOpen,
     paletteOpen,
     quickOpenOpen,
     recents,

@@ -29,6 +29,23 @@ import {
   rememberWorkspaceRoot
 } from './security'
 
+// "report.txt" → "report (2).txt" when the name is already taken, so a paste or
+// drop never silently overwrites an existing file.
+async function uniqueDestination(source: string, targetDir: string): Promise<string> {
+  const extension = path.extname(source)
+  const base = path.basename(source, extension)
+  for (let attempt = 1; attempt < 1000; attempt += 1) {
+    const name = attempt === 1 ? `${base}${extension}` : `${base} (${attempt})${extension}`
+    const candidate = path.join(targetDir, name)
+    try {
+      await fs.access(candidate)
+    } catch {
+      return candidate
+    }
+  }
+  throw new Error('Hedef klasörde uygun bir isim bulunamadı')
+}
+
 function execGit(args: string[], cwd: string): Promise<string> {
   return new Promise((resolve) => {
     execFile(
@@ -503,11 +520,55 @@ export function registerFileSystemHandlers(
     await fs.mkdir(safeDir, { recursive: true })
   })
 
-  handle(IPC.DELETE_PATH, async (_e, targetPath: string) => {
+  // Reversible delete — the OS recycle bin instead of an unrecoverable rm.
+  handle(IPC.TRASH_PATH, async (_e, targetPath: string) => {
     const safePath = assertAllowedPath(targetPath, 'Yol')
     assertNotWorkspaceRoot(safePath, 'Silinecek yol')
-    await fs.rm(safePath, { recursive: true, force: true })
+    await shell.trashItem(safePath)
   })
+
+  handle(IPC.COPY_PATH, async (_e, source: string, targetDir: string): Promise<string> => {
+    const safeSource = assertAllowedPath(source, 'Kaynak')
+    const safeTarget = assertAllowedPath(targetDir, 'Hedef klasör')
+    assertSameAllowedRoot(safeSource, safeTarget)
+    const destination = await uniqueDestination(safeSource, safeTarget)
+    await fs.cp(safeSource, destination, { recursive: true, errorOnExist: true, force: false })
+    return destination
+  })
+
+  handle(IPC.MOVE_PATH, async (_e, source: string, targetDir: string): Promise<string> => {
+    const safeSource = assertAllowedPath(source, 'Kaynak')
+    const safeTarget = assertAllowedPath(targetDir, 'Hedef klasör')
+    assertNotWorkspaceRoot(safeSource, 'Taşınacak yol')
+    assertSameAllowedRoot(safeSource, safeTarget)
+    if (path.dirname(safeSource) === safeTarget) return safeSource
+    // Moving a folder into itself (or its own subtree) would destroy it.
+    const relative = path.relative(safeSource, safeTarget)
+    if (relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))) {
+      throw new Error('Bir klasör kendi içine taşınamaz')
+    }
+    const destination = await uniqueDestination(safeSource, safeTarget)
+    await fs.rename(safeSource, destination)
+    return destination
+  })
+
+  // Files dropped from outside the app. The source lives anywhere on disk — the
+  // user picked it explicitly — but the destination must be inside a workspace.
+  handle(
+    IPC.IMPORT_PATHS,
+    async (_e, sources: string[], targetDir: string): Promise<string[]> => {
+      const safeTarget = assertAllowedPath(targetDir, 'Hedef klasör')
+      const imported: string[] = []
+      for (const source of sources) {
+        if (typeof source !== 'string' || !source.trim() || source.includes('\0')) continue
+        const resolved = path.resolve(source)
+        const destination = await uniqueDestination(resolved, safeTarget)
+        await fs.cp(resolved, destination, { recursive: true, errorOnExist: true, force: false })
+        imported.push(destination)
+      }
+      return imported
+    }
+  )
 
   handle(IPC.RENAME_PATH, async (_e, oldPath: string, newPath: string) => {
     const safeOldPath = assertAllowedPath(oldPath, 'Eski yol')
@@ -555,6 +616,21 @@ export function registerFileSystemHandlers(
 
   handle(IPC.COPY_TEXT, (_e, text: string) => {
     clipboard.writeText(text)
+  })
+
+  // Terminal links open in the user's browser. Only http(s) is allowed so a
+  // crafted sequence can't launch a local file or a custom protocol handler.
+  handle(IPC.OPEN_EXTERNAL, async (_e, rawUrl: string) => {
+    let url: URL
+    try {
+      url = new URL(rawUrl)
+    } catch {
+      throw new Error('Geçersiz bağlantı')
+    }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      throw new Error('Yalnızca http/https bağlantıları açılabilir')
+    }
+    await shell.openExternal(url.toString())
   })
 
   // Flat recursive file list for quick-open (skips hidden folders, capped).

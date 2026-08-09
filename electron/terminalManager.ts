@@ -33,6 +33,8 @@ export interface CreateTerminalOptions {
   command: string
   cols?: number
   rows?: number
+  /** Make the shell report its working directory via OSC 7. */
+  shellIntegration?: boolean
 }
 
 export interface TerminalSession {
@@ -70,6 +72,26 @@ const DEFAULT_COMMAND: Record<TerminalType, string> = {
 }
 const MAX_COMMAND_LENGTH = 2048
 const MAX_TERMINAL_DIMENSION = 500
+
+// cmd.exe prompt escapes: $e = ESC, $P = current path, $G = '>'. Emitting OSC 7
+// before the visible prompt tells the app which folder the shell is in.
+const CMD_OSC7_PROMPT = '$e]7;file:///$P$e\\'
+
+// Wraps whatever prompt function the user's profile installed (starship,
+// oh-my-posh, …) instead of replacing it, then appends the same OSC 7 report.
+const POWERSHELL_OSC7_PROMPT = [
+  '$__buyrukPrompt = $function:prompt;',
+  'function global:prompt {',
+  '  $out = & $__buyrukPrompt;',
+  "  try { $Host.UI.Write([char]27 + ']7;file:///' + $PWD.ProviderPath + [char]27 + '\\') } catch {};",
+  '  return $out',
+  '}'
+].join(' ')
+
+function isPowerShellExecutable(command: string): boolean {
+  const file = path.basename(command.trim().replace(/^"|"$/g, '')).toLowerCase()
+  return file === 'powershell.exe' || file === 'pwsh.exe' || file === 'powershell' || file === 'pwsh'
+}
 
 function clampDimension(value: number | undefined, fallback: number): number {
   if (!Number.isFinite(value)) return fallback
@@ -155,7 +177,8 @@ export class TerminalManager {
       cwd: assertWorkspaceRoot(options.cwd),
       command: command || fallbackCommand,
       cols: clampDimension(options.cols, 80),
-      rows: clampDimension(options.rows, 24)
+      rows: clampDimension(options.rows, 24),
+      shellIntegration: options.shellIntegration !== false
     }
   }
 
@@ -163,29 +186,47 @@ export class TerminalManager {
   // cmd/powershell are launched directly. AI CLIs are launched *inside* cmd.exe
   // with /k so that (a) PATH-resolved shims (.cmd) work, and (b) the terminal stays
   // alive after the CLI exits, and (c) "not recognized" errors are visible to the user.
-  private resolveShell(options: CreateTerminalOptions): { file: string; args: string[] } {
+  private resolveShell(options: CreateTerminalOptions): {
+    file: string
+    args: string[]
+    env: Record<string, string>
+  } {
     const comspec = process.env.ComSpec || 'cmd.exe'
+    const integrate = options.shellIntegration !== false
+    // cmd.exe reads PROMPT from the environment, so shell integration is just an
+    // env var — it also reaches the AI CLIs, which we launch inside cmd /k.
+    const cmdEnv: Record<string, string> = integrate
+      ? { PROMPT: `${CMD_OSC7_PROMPT}${process.env.PROMPT || '$P$G'}` }
+      : {}
+
     switch (options.type) {
       case 'cmd':
-        return { file: options.command || 'cmd.exe', args: [] }
-      case 'powershell':
-        return { file: options.command || 'powershell.exe', args: [] }
+        return { file: options.command || 'cmd.exe', args: [], env: cmdEnv }
+      case 'powershell': {
+        const file = options.command || 'powershell.exe'
+        // Only wrap a real PowerShell host; a custom command may take its own args.
+        const args =
+          integrate && isPowerShellExecutable(file)
+            ? ['-NoExit', '-Command', POWERSHELL_OSC7_PROMPT]
+            : []
+        return { file, args, env: {} }
+      }
       case 'claude':
-        return { file: comspec, args: ['/k', options.command || 'claude'] }
+        return { file: comspec, args: ['/k', options.command || 'claude'], env: cmdEnv }
       case 'codex':
       case 'opencode':
       case 'antigravity':
-        return { file: comspec, args: ['/k', options.command] }
+        return { file: comspec, args: ['/k', options.command], env: cmdEnv }
       default:
-        return { file: comspec, args: [] }
+        return { file: comspec, args: [], env: cmdEnv }
     }
   }
 
   private async spawnPty(id: string, options: CreateTerminalOptions): Promise<void> {
     const pty = await getPty()
-    const { file, args } = this.resolveShell(options)
+    const { file, args, env: shellEnv } = this.resolveShell(options)
 
-    const env = { ...(process.env as Record<string, string>) }
+    const env = { ...(process.env as Record<string, string>), ...shellEnv }
 
     const ptyProcess = pty.spawn(file, args, {
       name: 'xterm-color',

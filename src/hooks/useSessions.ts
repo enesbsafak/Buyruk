@@ -12,9 +12,10 @@ interface State {
 }
 
 type Action =
-  | { type: 'ADD'; session: TerminalSession }
+  | { type: 'ADD'; session: TerminalSession; restoredScrollback?: string }
   | { type: 'SET_ACTIVE'; id: string }
   | { type: 'REMOVE'; id: string }
+  | { type: 'REORDER'; from: number; to: number }
   | { type: 'SET_STATUS'; id: string; status: TerminalStatus; exitCode?: number }
   | { type: 'RESTART'; id: string }
   | { type: 'RENAME'; id: string; title: string }
@@ -52,7 +53,8 @@ function reducer(state: State, action: Action): State {
         status: 'running',
         gen: 0,
         openFiles: [],
-        activeFilePath: null
+        activeFilePath: null,
+        restoredScrollback: action.restoredScrollback
       }
       return withActiveFlags({
         sessions: [...state.sessions, runtime],
@@ -70,6 +72,16 @@ function reducer(state: State, action: Action): State {
         activeId = remaining.length ? remaining[remaining.length - 1].id : null
       }
       return withActiveFlags({ sessions: remaining, activeId })
+    }
+
+    case 'REORDER': {
+      const { from, to } = action
+      if (from === to || from < 0 || to < 0) return state
+      if (from >= state.sessions.length || to >= state.sessions.length) return state
+      const sessions = [...state.sessions]
+      const [moved] = sessions.splice(from, 1)
+      sessions.splice(to, 0, moved)
+      return { ...state, sessions }
     }
 
     case 'SET_STATUS':
@@ -163,9 +175,11 @@ export function useSessions() {
 
   const actions = useMemo(
     () => ({
-      add: (session: TerminalSession) => dispatch({ type: 'ADD', session }),
+      add: (session: TerminalSession, restoredScrollback?: string) =>
+        dispatch({ type: 'ADD', session, restoredScrollback }),
       setActive: (id: string) => dispatch({ type: 'SET_ACTIVE', id }),
       remove: (id: string) => dispatch({ type: 'REMOVE', id }),
+      reorder: (from: number, to: number) => dispatch({ type: 'REORDER', from, to }),
       setStatus: (id: string, status: TerminalStatus, exitCode?: number) =>
         dispatch({ type: 'SET_STATUS', id, status, exitCode }),
       restart: (id: string) => dispatch({ type: 'RESTART', id }),

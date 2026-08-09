@@ -7,6 +7,7 @@ export interface MenuItem {
   onClick?: () => void
   submenu?: MenuItem[]
   danger?: boolean
+  disabled?: boolean
   separator?: boolean
 }
 
@@ -66,6 +67,7 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
             <button
               type="button"
               className={`ctx-item ${item.danger ? 'danger' : ''}`}
+              disabled={item.disabled}
               aria-haspopup={item.submenu ? 'menu' : undefined}
               aria-expanded={item.submenu ? openSub === itemKey(item) : undefined}
               onClick={() => {

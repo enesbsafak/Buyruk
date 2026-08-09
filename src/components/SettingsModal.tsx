@@ -164,6 +164,43 @@ function SettingsModalContent({
         </label>
 
         <label className="field">
+          <span className="field-label">Terminal geçmişi (satır)</span>
+          <input
+            type="number"
+            min={1000}
+            max={100000}
+            step={1000}
+            className="field-input"
+            value={draft.terminalScrollback}
+            onChange={(e) =>
+              set(
+                'terminalScrollback',
+                Math.max(1000, Math.min(100000, parseInt(e.target.value, 10) || 8000))
+              )
+            }
+          />
+          <span className="field-hint">
+            Her terminalin bellekte tuttuğu satır sayısı. Yüksek değer daha çok bellek kullanır.
+          </span>
+        </label>
+
+        <label className="field field-check">
+          <input
+            type="checkbox"
+            checked={draft.trackShellCwd}
+            onChange={(e) => set('trackShellCwd', e.target.checked)}
+          />
+          <span>
+            <span className="field-label">Terminal klasörünü takip et</span>
+            <span className="field-hint">
+              CMD ve PowerShell oturumlarına, bulundukları klasörü bildiren bir prompt eki
+              ekler; dosya gezgini <code>cd</code> ile birlikte hareket eder. Özel bir prompt
+              kurulumun bozulursa bunu kapat (değişiklik yeni terminallerde geçerli olur).
+            </span>
+          </span>
+        </label>
+
+        <label className="field">
           <span className="field-label">Tema</span>
           <select
             className="field-input"

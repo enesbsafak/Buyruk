@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from './Icon'
 import { CliIcon } from './CliIcon'
-import { AiLimitsPopover } from './AiLimitsPopover'
 import { basename } from '../utils/pathUtils'
 import type { RecentFolder } from '../utils/persistence'
-import type { AiLimitsOverview, SessionRuntime, TerminalType } from '../types'
+import type { SessionRuntime, TerminalType } from '../types'
 import brandLogo from '../assets/icon.png'
 
 interface ToolbarProps {
@@ -16,7 +15,6 @@ interface ToolbarProps {
   recents: RecentFolder[]
   onOpenRecent: (recent: RecentFolder) => void
   onUpdateAiTools: () => void
-  onOpenDatabase: () => void
   activeSession: SessionRuntime | null
 }
 
@@ -38,33 +36,13 @@ export function Toolbar({
   recents,
   onOpenRecent,
   onUpdateAiTools,
-  onOpenDatabase,
   activeSession
 }: ToolbarProps) {
   const [maximized, setMaximized] = useState(false)
   const [recentsOpen, setRecentsOpen] = useState(false)
-  const [limitsOpen, setLimitsOpen] = useState(false)
-  const [limitsLoading, setLimitsLoading] = useState(false)
-  const [limitsError, setLimitsError] = useState<string | null>(null)
-  const [limitsOverview, setLimitsOverview] = useState<AiLimitsOverview | null>(null)
   const recentsRef = useRef<HTMLDivElement>(null)
-  const limitsRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => window.api.windowControls.onMaximizedChange(setMaximized), [])
-
-  const loadLimits = async (force = false, clearBeforeLoad = false) => {
-    setLimitsLoading(true)
-    setLimitsError(null)
-    if (clearBeforeLoad) setLimitsOverview(null)
-    try {
-      const overview = await window.api.aiLimits.get({ force })
-      setLimitsOverview(overview)
-    } catch (err) {
-      setLimitsError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setLimitsLoading(false)
-    }
-  }
 
   // Close the recents dropdown on any outside click.
   useEffect(() => {
@@ -75,16 +53,6 @@ export function Toolbar({
     window.addEventListener('mousedown', onDown)
     return () => window.removeEventListener('mousedown', onDown)
   }, [recentsOpen])
-
-  useEffect(() => {
-    if (!limitsOpen) return
-    void loadLimits(false, true)
-    const onDown = (e: MouseEvent) => {
-      if (!limitsRef.current?.contains(e.target as Node)) setLimitsOpen(false)
-    }
-    window.addEventListener('mousedown', onDown)
-    return () => window.removeEventListener('mousedown', onDown)
-  }, [limitsOpen])
 
   return (
     <header className="toolbar">
@@ -147,10 +115,6 @@ export function Toolbar({
         <Icon name="download" />
         <span className="toolbar-label">Klonla</span>
       </button>
-      <button type="button" className="btn btn-ghost toolbar-action no-drag" title="Veritabanı (PostgreSQL)" onClick={onOpenDatabase}>
-        <Icon name="database" />
-        <span className="toolbar-label">Veritabanı</span>
-      </button>
 
       <div className="toolbar-spacer" />
 
@@ -163,26 +127,6 @@ export function Toolbar({
         <Icon name="refresh" size={15} />
         <span className="toolbar-label">AI Araçları Güncelle</span>
       </button>
-      <div className="toolbar-popover-wrap no-drag" ref={limitsRef}>
-        <button
-          type="button"
-          className={`icon-btn ${limitsOpen ? 'is-on' : ''}`}
-          title="AI kullanım limitleri"
-          onClick={() => setLimitsOpen((open) => !open)}
-        >
-          <Icon name="bolt" size={16} />
-        </button>
-        {limitsOpen && (
-          <div className="toolbar-popover ai-limits-popover">
-            <AiLimitsPopover
-              overview={limitsOverview}
-              loading={limitsLoading}
-              error={limitsError}
-              onRefresh={() => void loadLimits(true)}
-            />
-          </div>
-        )}
-      </div>
       <button type="button" className="icon-btn no-drag" title="Ayarlar" onClick={onOpenSettings}>
         <Icon name="settings" size={17} />
       </button>

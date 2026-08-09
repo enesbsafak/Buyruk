@@ -10,7 +10,7 @@ Görseldeki proje yolu, terminal çıktısı ve dosyalar anonim örnek veridir.
 
 ## Teknoloji
 
-Electron, React, TypeScript, Vite, xterm.js, node-pty ve Monaco Editor.
+Electron, React, TypeScript, Vite, xterm.js (WebGL renderer), node-pty ve Monaco Editor.
 
 Güvenlik tarafında `contextIsolation: true` ve `nodeIntegration: false` kullanılır. Dosya sistemi, terminal ve updater işlemleri Electron main process içinde çalışır; renderer tarafına yalnızca `preload.ts` üzerinden güvenli API açılır.
 
@@ -18,21 +18,31 @@ Güvenlik tarafında `contextIsolation: true` ve `nodeIntegration: false` kullan
 
 **Terminal çalışma alanı**
 
-- CMD, PowerShell, Claude ve Codex oturumları.
-- Birden fazla terminal açıldığında otomatik grid yerleşimi.
+- CMD, PowerShell, Claude, Codex, OpenCode ve Antigravity oturumları.
+- Izgara veya sekme düzeni; ızgarada sütun sayısı seçilebilir, pane sınırları sürüklenerek yeniden boyutlandırılır, pane'ler sürüklenerek sıralanır. Düzen tercihleri kalıcıdır.
+- WebGL hızlandırmalı render, tıklanabilir bağlantılar ve Unicode 11 genişlik desteği.
+- Terminal teması uygulama temasını (koyu/açık) takip eder.
 - Her terminal için arama, yeniden başlatma ve zoom kontrolleri.
+- Sağ tık menüsü: kopyala, yapıştır, tümünü seç, ara, ekranı temizle.
 - Broadcast modu ile girişi tüm terminallere aynı anda gönderme.
 - Aktif terminale hızlı prompt gönderme.
-- Oturumları ve son klasörleri kalıcı saklama.
+- Oturumlar, son klasörler ve terminal geçmişinin son satırları kalıcı saklanır; uygulama yeniden açıldığında ekran geri yüklenir.
+- Shell klasör takibi (OSC 7): CMD ve PowerShell oturumlarında `cd` yapıldığında dosya gezgini takip eder. Ayarlardan kapatılabilir.
 - Claude Code oturumlarında clipboard'da görsel varken `Ctrl+V` ile görsel yapıştırma.
 
 **Dosya gezgini**
 
-- Aktif terminal klasörüne bağlı dosya ağacı.
-- `fs.watch` ile klasör yenileme.
+- Aktif terminal klasörüne bağlı dosya ağacı; `fs.watch` ile yenilenir ve yenileme sırasında liste ekranda kalır.
+- Dosya türüne göre ikon ve renkler; klasörlerde birikimli Git değişiklik göstergesi.
+- Klavye ile tam gezinme: ok tuşları, `Home`/`End`, `Enter`, `F2`, `Delete`, `Ctrl+A/C/X/V/D`, `Shift` ile aralık seçimi.
+- Çoklu seçim, kes/kopyala/yapıştır/çoğalt; çakışan isimler `dosya (2).txt` olarak açılır.
+- Sürükle-bırak ile taşıma ve Windows Explorer'dan dosya ekleme.
+- Panel içi filtre kutusu; büyük klasörlerde otomatik sanallaştırma.
+- Açık klasörler çalışma alanı başına hatırlanır.
+- Gizlenecek klasörler gerçekten gizlenir; göz düğmesiyle geçici olarak gösterilebilir.
+- Silinen öğeler geri dönüşüm kutusuna taşınır.
 - Git dal bilgisi ve dosya durum rozetleri.
 - Git diff görüntüleme: değişmiş dosyalarda araç çubuğu veya sağ tık menüsüyle read-only `.diff` sekmesi açma.
-- Sağ tık menüsü: burada terminal aç, Git diff göster, Explorer'da göster, yol kopyala, yeni dosya/klasör, yeniden adlandır, sil.
 - `Ctrl+P` ile fuzzy dosya açma.
 
 **Kod editörü**
@@ -122,11 +132,11 @@ Auto-update yalnızca paketlenmiş/kurulmuş sürümde çalışır. Uygulama aç
 
 Uygulama içinden şunlar değiştirilebilir:
 
-- CMD komutu
-- PowerShell komutu
-- Claude komutu
-- Codex komutu
+- CMD, PowerShell, Claude, Codex, OpenCode ve Antigravity komutları
+- Varsayılan proje klasörü
 - Terminal fontu ve font boyutu
+- Terminal geçmişi (satır sayısı)
+- Terminal klasör takibi (OSC 7)
 - Tema
 - Gizlenecek klasörler
 
@@ -142,6 +152,7 @@ Buyruk/
     ipcChannels.ts
     main.ts
     preload.ts
+    security.ts
     terminalManager.ts
     updater.ts
     windowState.ts
@@ -155,6 +166,9 @@ Buyruk/
     main.tsx
     monaco.ts
     styles.css
+    terminalBus.ts
+    terminalSnapshots.ts
+    terminalTheme.ts
     types.ts
     updateTypes.ts
 ```
@@ -169,4 +183,5 @@ MIT
 - Installer şu an unsigned; public dağıtımda SmartScreen uyarısı beklenebilir.
 - Auto-update geliştirme modunda çalışmaz.
 - 5 MB üstü veya NUL byte içeren dosyalar metin olarak açılmaz.
-- Çok fazla terminal açıldığında her pane küçülür.
+- Dosya ağacındaki filtre yalnızca açık klasörlerde çalışır; tüm projede aramak için `Ctrl+P` kullanın.
+- Shell klasör takibi CMD ve PowerShell oturumları içindir; AI CLI'ları çalışırken klasör bildirimi göndermez.

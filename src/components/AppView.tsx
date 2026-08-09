@@ -30,6 +30,7 @@ interface AppViewProps {
   gitPanelOpen: boolean
   gitStatus: GitStatus
   handleBell: (id: string) => void
+  handleCwdChange: (id: string, cwd: string) => void
   handleBroadcastPrompt: () => void
   handleChangeContent: (path: string, content: string) => void
   handleCheckForUpdates: () => void
@@ -56,14 +57,12 @@ interface AppViewProps {
   handleCloneRepo: () => void
   handleOpenTerminalHere: (cwd: string, type: TerminalType) => void
   handleRenameSession: (session: SessionRuntime) => void
+  handleReorderSessions: (from: number, to: number) => void
   handleRefreshGit: () => void
   handleRestart: (session: SessionRuntime) => void
   handleSaveSettings: (settings: Settings) => void
   handleSelectFile: (path: string) => void
   openSettings: () => void
-  openDatabase: () => void
-  closeDatabase: () => void
-  dbOpen: boolean
   paletteOpen: boolean
   quickOpenOpen: boolean
   recents: RecentFolder[]
@@ -92,6 +91,7 @@ export function AppView({
   gitPanelOpen,
   gitStatus,
   handleBell,
+  handleCwdChange,
   handleBroadcastPrompt,
   handleChangeContent,
   handleCheckForUpdates,
@@ -118,14 +118,12 @@ export function AppView({
   handleCloneRepo,
   handleOpenTerminalHere,
   handleRenameSession,
+  handleReorderSessions,
   handleRefreshGit,
   handleRestart,
   handleSaveSettings,
   handleSelectFile,
   openSettings,
-  openDatabase,
-  closeDatabase,
-  dbOpen,
   paletteOpen,
   quickOpenOpen,
   recents,
@@ -184,7 +182,6 @@ export function AppView({
         recents={recents}
         onOpenRecent={handleOpenRecent}
         onUpdateAiTools={handleUpdateAiTools}
-        onOpenDatabase={openDatabase}
         activeSession={activeSession}
       />
 
@@ -208,8 +205,10 @@ export function AppView({
           onCloseSession={handleCloseSession}
           onRestart={handleRestart}
           onRenameSession={handleRenameSession}
+          onReorderSessions={handleReorderSessions}
           onInput={handleInput}
           onBell={handleBell}
+          onCwdChange={handleCwdChange}
           onToggleBroadcast={toggleBroadcast}
           onOpenFile={handleOpenFile}
           onOpenTerminalHere={handleOpenTerminalHere}
@@ -246,8 +245,6 @@ export function AppView({
         onClosePalette={closePalette}
         onSaveSettings={handleSaveSettings}
         onCloseSettings={closeSettings}
-        dbOpen={dbOpen}
-        onCloseDatabase={closeDatabase}
       />
     </div>
   )

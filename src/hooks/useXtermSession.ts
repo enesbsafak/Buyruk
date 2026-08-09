@@ -2,8 +2,15 @@ import { useCallback, useEffect, useRef, type RefObject } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon } from '@xterm/addon-search'
+import { SerializeAddon } from '@xterm/addon-serialize'
+import { Unicode11Addon } from '@xterm/addon-unicode11'
+import { WebLinksAddon } from '@xterm/addon-web-links'
+import { WebglAddon } from '@xterm/addon-webgl'
 import { terminalBus } from '../terminalBus'
-import type { SessionRuntime } from '../types'
+import { terminalTheme } from '../terminalTheme'
+import { parseOsc7 } from '../utils/osc7'
+import { useLatestRef } from './useLatestRef'
+import type { SessionRuntime, ThemeName } from '../types'
 
 export interface TerminalScrollState {
   viewportY: number
@@ -24,12 +31,19 @@ interface UseXtermSessionOptions {
   session: SessionRuntime
   fontFamily: string
   fontSize: number
+  scrollback: number
+  theme: ThemeName
   zoomed: boolean
   onInput: (id: string, data: string) => void
   onBell: (id: string) => void
   onOpenSearch: () => void
   onScrollStateChange: (state: TerminalScrollState) => void
+  onCwdChange: (id: string, cwd: string) => void
 }
+
+// Lines of scrollback kept when a session is saved for the next launch. Enough
+// to see what you were doing without bloating localStorage.
+const RESTORE_LINES = 600
 
 function getScrollState(term: Terminal, viewportY = term.buffer.active.viewportY) {
   const baseY = term.buffer.active.baseY
@@ -46,34 +60,45 @@ export function useXtermSession({
   session,
   fontFamily,
   fontSize,
+  scrollback,
+  theme,
   zoomed,
   onInput,
   onBell,
   onOpenSearch,
-  onScrollStateChange
+  onScrollStateChange,
+  onCwdChange
 }: UseXtermSessionOptions) {
   const termRef = useRef<Terminal | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
   const searchRef = useRef<SearchAddon | null>(null)
+  const serializeRef = useRef<SerializeAddon | null>(null)
   const lastScrollKeyRef = useRef('')
   const lastScrollStateRef = useRef(INITIAL_TERMINAL_SCROLL)
-  const latestRef = useRef({
+  // Last dimensions actually sent to the pty, so dragging a split divider only
+  // costs an IPC round-trip when the character grid really changes.
+  const lastSizeRef = useRef({ cols: 0, rows: 0 })
+  const latestRef = useLatestRef({
     fontFamily,
     fontSize,
+    scrollback,
+    theme,
     onInput,
     onBell,
     onOpenSearch,
-    onScrollStateChange
+    onScrollStateChange,
+    onCwdChange
   })
 
-  latestRef.current = {
-    fontFamily,
-    fontSize,
-    onInput,
-    onBell,
-    onOpenSearch,
-    onScrollStateChange
-  }
+  const pushSize = useCallback(
+    (term: Terminal) => {
+      const last = lastSizeRef.current
+      if (last.cols === term.cols && last.rows === term.rows) return
+      lastSizeRef.current = { cols: term.cols, rows: term.rows }
+      window.api.resizeTerminal(session.id, term.cols, term.rows)
+    },
+    [session.id]
+  )
 
   const notifyScrollState = useCallback((term: Terminal, viewportY?: number) => {
     const next = getScrollState(term, viewportY)
@@ -90,13 +115,29 @@ export function useXtermSession({
     try {
       const shouldFollowBottom = followBottom || lastScrollStateRef.current.atBottom
       fitRef.current?.fit()
-      window.api.resizeTerminal(session.id, term.cols, term.rows)
+      pushSize(term)
       if (shouldFollowBottom) term.scrollToBottom()
       notifyScrollState(term)
     } catch {
       // ignore transient resize errors
     }
-  }, [notifyScrollState, session.id])
+  }, [notifyScrollState, pushSize])
+
+  const pasteFromClipboard = useCallback(() => {
+    const term = termRef.current
+    if (!term) return
+    const text = window.api.clipboardReadText()
+    if (text) {
+      term.paste(text)
+      term.focus()
+      return
+    }
+    // Claude Code accepts images pasted through its own Esc-v handshake.
+    if (session.type === 'claude' && window.api.clipboardHasImage()) {
+      latestRef.current.onInput(session.id, '\x1bv')
+    }
+    term.focus()
+  }, [session.id, session.type])
 
   useEffect(() => {
     const host = hostRef.current
@@ -107,42 +148,47 @@ export function useXtermSession({
       fontFamily: latestRef.current.fontFamily,
       fontSize: latestRef.current.fontSize,
       lineHeight: 1.2,
-      scrollback: 8000,
+      scrollback: latestRef.current.scrollback,
       allowProposedApi: true,
-      theme: {
-        background: '#15161e',
-        foreground: '#c0caf5',
-        cursor: '#c0caf5',
-        cursorAccent: '#15161e',
-        selectionBackground: '#28344a',
-        black: '#15161e',
-        red: '#f7768e',
-        green: '#9ece6a',
-        yellow: '#e0af68',
-        blue: '#7aa2f7',
-        magenta: '#bb9af7',
-        cyan: '#7dcfff',
-        white: '#a9b1d6',
-        brightBlack: '#414868',
-        brightRed: '#f7768e',
-        brightGreen: '#9ece6a',
-        brightYellow: '#e0af68',
-        brightBlue: '#7aa2f7',
-        brightMagenta: '#bb9af7',
-        brightCyan: '#7dcfff',
-        brightWhite: '#c0caf5'
-      }
+      theme: terminalTheme(latestRef.current.theme)
     })
     const fit = new FitAddon()
     const search = new SearchAddon()
+    const serialize = new SerializeAddon()
+    const unicode11 = new Unicode11Addon()
     term.loadAddon(fit)
     term.loadAddon(search)
+    term.loadAddon(serialize)
+    term.loadAddon(unicode11)
+    term.unicode.activeVersion = '11'
+    // Links open in the system browser: the renderer itself denies window.open.
+    term.loadAddon(
+      new WebLinksAddon((_event, uri) => {
+        void window.api.openExternal(uri).catch(() => {})
+      })
+    )
     term.open(host)
     termRef.current = term
     fitRef.current = fit
     searchRef.current = search
+    serializeRef.current = serialize
     lastScrollKeyRef.current = ''
     lastScrollStateRef.current = INITIAL_TERMINAL_SCROLL
+    lastSizeRef.current = { cols: 0, rows: 0 }
+
+    // GPU rendering; falls back to the DOM renderer if the context is
+    // unavailable or is lost later (driver reset, GPU process crash).
+    let webgl: WebglAddon | null = null
+    try {
+      webgl = new WebglAddon()
+      webgl.onContextLoss(() => {
+        webgl?.dispose()
+        webgl = null
+      })
+      term.loadAddon(webgl)
+    } catch {
+      webgl = null
+    }
 
     try {
       fit.fit()
@@ -157,9 +203,25 @@ export function useXtermSession({
     const onData = term.onData((data) => latestRef.current.onInput(session.id, data))
     const onBellEvt = term.onBell(() => latestRef.current.onBell(session.id))
     const onScroll = term.onScroll((position) => notifyScrollState(term, position))
+
+    // Shell integration: the shell reports its working directory via OSC 7 so the
+    // file explorer can follow `cd`. Returning true marks the sequence handled.
+    term.parser.registerOscHandler(7, (payload) => {
+      const cwd = parseOsc7(payload)
+      if (cwd) latestRef.current.onCwdChange(session.id, cwd)
+      return true
+    })
+
+    // Replay the previous run's scrollback before live output starts flowing.
+    if (session.gen === 0 && session.restoredScrollback) {
+      term.write(
+        `${session.restoredScrollback}\r\n\x1b[2m── önceki oturum burada bitti ──\x1b[0m\r\n`
+      )
+    }
+
     const unsubscribe = terminalBus.subscribe(session.id, (data) => term.write(data, syncScrollState))
 
-    window.api.resizeTerminal(session.id, term.cols, term.rows)
+    pushSize(term)
     requestAnimationFrame(syncScrollState)
 
     term.attachCustomKeyEventHandler((e) => {
@@ -191,44 +253,45 @@ export function useXtermSession({
         !e.shiftKey &&
         key === 'v'
       ) {
-        const text = window.api.clipboardReadText()
-        if (text) {
-          term.paste(text)
-          return false
-        }
-
-        if (session.type === 'claude' && window.api.clipboardHasImage()) {
-          latestRef.current.onInput(session.id, '\x1bv')
-          return false
-        }
+        pasteFromClipboard()
+        return false
       }
 
       return true
     })
 
+    // Coalesce resize bursts (split-divider drags fire one per frame) into a
+    // single fit per animation frame.
+    let resizeFrame = 0
     const resizeObserver = new ResizeObserver(() => {
-      try {
-        fit.fit()
-        window.api.resizeTerminal(session.id, term.cols, term.rows)
-        const shouldFollowBottom = lastScrollStateRef.current.atBottom
-        if (shouldFollowBottom) term.scrollToBottom()
-        notifyScrollState(term)
-      } catch {
-        // ignore transient resize errors
-      }
+      if (resizeFrame) return
+      resizeFrame = requestAnimationFrame(() => {
+        resizeFrame = 0
+        if (disposed) return
+        try {
+          fit.fit()
+          pushSize(term)
+          if (lastScrollStateRef.current.atBottom) term.scrollToBottom()
+          notifyScrollState(term)
+        } catch {
+          // ignore transient resize errors
+        }
+      })
     })
     resizeObserver.observe(host)
 
     return () => {
       disposed = true
+      if (resizeFrame) cancelAnimationFrame(resizeFrame)
       onData.dispose()
       onBellEvt.dispose()
       onScroll.dispose()
       unsubscribe()
       resizeObserver.disconnect()
+      webgl?.dispose()
       term.dispose()
     }
-  }, [hostRef, notifyScrollState, session.gen, session.id, session.type])
+  }, [hostRef, notifyScrollState, pasteFromClipboard, pushSize, session.gen, session.id, session.type])
 
   useEffect(() => {
     const term = termRef.current
@@ -239,11 +302,56 @@ export function useXtermSession({
   }, [fitAndResize, fontFamily, fontSize])
 
   useEffect(() => {
+    const term = termRef.current
+    if (!term) return
+    term.options.theme = terminalTheme(theme)
+  }, [theme])
+
+  useEffect(() => {
+    const term = termRef.current
+    if (!term) return
+    term.options.scrollback = scrollback
+  }, [scrollback])
+
+  useEffect(() => {
     requestAnimationFrame(() => fitAndResize(true))
   }, [fitAndResize, zoomed])
 
   const focusTerminal = useCallback(() => {
     termRef.current?.focus()
+  }, [])
+
+  const hasSelection = useCallback(() => termRef.current?.hasSelection() ?? false, [])
+
+  const copySelection = useCallback(() => {
+    const term = termRef.current
+    if (!term?.hasSelection()) return
+    void window.api.copyText(term.getSelection())
+    term.clearSelection()
+    term.focus()
+  }, [])
+
+  const selectAll = useCallback(() => {
+    const term = termRef.current
+    if (!term) return
+    term.selectAll()
+    term.focus()
+  }, [])
+
+  const clearTerminal = useCallback(() => {
+    const term = termRef.current
+    if (!term) return
+    term.clear()
+    term.focus()
+    notifyScrollState(term)
+  }, [notifyScrollState])
+
+  const snapshot = useCallback((): string => {
+    try {
+      return serializeRef.current?.serialize({ scrollback: RESTORE_LINES }) ?? ''
+    } catch {
+      return ''
+    }
   }, [])
 
   const scrollToBottom = useCallback(() => {
@@ -271,6 +379,12 @@ export function useXtermSession({
     searchRef,
     focusTerminal,
     scrollToBottom,
-    scrollToLine
+    scrollToLine,
+    hasSelection,
+    copySelection,
+    pasteFromClipboard,
+    selectAll,
+    clearTerminal,
+    snapshot
   }
 }

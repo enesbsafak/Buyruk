@@ -1,4 +1,5 @@
 import { useEffect, useReducer, useRef, type ReactNode } from 'react'
+import { useLatestRef } from '../hooks/useLatestRef'
 import { loadPanelSize, savePanelSize } from '../utils/persistence'
 
 interface SplitLayoutProps {
@@ -33,13 +34,10 @@ export function SplitLayout({
   const containerRef = useRef<HTMLDivElement>(null)
   const dragging = useRef(false)
   const isHorizontal = direction === 'horizontal'
-  const layoutRef = useRef({ isHorizontal, min, anchor })
-  layoutRef.current = { isHorizontal, min, anchor }
-  // Live refs so the once-bound stopDrag handler can persist the latest size.
-  const sizeRef = useRef(size)
-  sizeRef.current = size
-  const storageKeyRef = useRef(storageKey)
-  storageKeyRef.current = storageKey
+  // Live refs so the once-bound drag handlers always see the latest layout.
+  const layoutRef = useLatestRef({ isHorizontal, min, anchor })
+  const sizeRef = useLatestRef(size)
+  const storageKeyRef = useLatestRef(storageKey)
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
