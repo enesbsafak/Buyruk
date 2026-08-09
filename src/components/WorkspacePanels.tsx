@@ -191,12 +191,13 @@ export function WorkspacePanels({
         />
 
         <div className="workspace-sidebar">
+          {/* Doubles as the sidebar's toolbar — a title here would crowd out the
+              toggles at the sidebar's default width. */}
           <div className="workspace-sidebar-head">
-            <span className="workspace-sidebar-title">Çalışma Alanı</span>
             <button
               type="button"
               className={`btn btn-ghost sidebar-git-toggle ${clipboardOpen ? 'is-on' : ''}`}
-              title="Pano paneli"
+              title="Pano paneli: kopyaladığın görseller"
               aria-pressed={clipboardOpen}
               onClick={onCloseClipboard}
             >

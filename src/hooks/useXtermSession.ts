@@ -176,13 +176,23 @@ export function useXtermSession({
     lastScrollStateRef.current = INITIAL_TERMINAL_SCROLL
     lastSizeRef.current = { cols: 0, rows: 0 }
 
-    // GPU rendering; falls back to the DOM renderer if the context is
+    let disposed = false
+
+    // GPU rendering, falling back to the DOM renderer when the context is
     // unavailable or is lost later (driver reset, GPU process crash).
-    // Never dispose this manually: term.dispose() disposes loaded addons, and
-    // disposing twice throws while the pane is unmounting.
+    //
+    // Tearing the terminal down also tears down the canvas, which fires
+    // `webglcontextlost`. Disposing the addon from that handler while
+    // term.dispose() is already walking the addon list disposes it twice and
+    // throws mid-unmount, so the subscription is dropped first and the handler
+    // additionally checks the teardown flag.
+    let contextLoss: { dispose(): void } | null = null
     try {
       const webgl = new WebglAddon()
-      webgl.onContextLoss(() => webgl.dispose())
+      contextLoss = webgl.onContextLoss(() => {
+        if (disposed) return
+        webgl.dispose()
+      })
       term.loadAddon(webgl)
     } catch {
       // WebGL unavailable; the DOM renderer stays in place.
@@ -194,7 +204,6 @@ export function useXtermSession({
       // host may have zero size initially
     }
 
-    let disposed = false
     const syncScrollState = () => {
       if (!disposed) notifyScrollState(term)
     }
@@ -280,18 +289,34 @@ export function useXtermSession({
 
     return () => {
       disposed = true
-      if (resizeFrame) cancelAnimationFrame(resizeFrame)
-      onData.dispose()
-      onBellEvt.dispose()
-      onScroll.dispose()
-      unsubscribe()
-      resizeObserver.disconnect()
       // Clear the refs first: a stray callback must not reach a disposed terminal.
       termRef.current = null
       fitRef.current = null
       searchRef.current = null
       serializeRef.current = null
-      term.dispose()
+
+      if (resizeFrame) cancelAnimationFrame(resizeFrame)
+      unsubscribe()
+      resizeObserver.disconnect()
+
+      // Teardown runs while React is unmounting the pane, and xterm's addon
+      // manager has been seen throwing from an addon's own dispose. Letting that
+      // escape would abort the unmount and take the whole tree down, so the
+      // disposals that reach into xterm are isolated.
+      try {
+        contextLoss?.dispose()
+        onData.dispose()
+        onBellEvt.dispose()
+        onScroll.dispose()
+      } catch (err) {
+        console.warn('Terminal dinleyicileri kapatılamadı:', err)
+      }
+
+      try {
+        term.dispose()
+      } catch (err) {
+        console.warn('Terminal kapatılırken hata:', err)
+      }
     }
   }, [hostRef, notifyScrollState, pasteFromClipboard, pushSize, session.gen, session.id, session.type])
 

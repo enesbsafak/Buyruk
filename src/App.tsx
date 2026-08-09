@@ -342,10 +342,6 @@ function useTerminalController({
 }: TerminalControllerOptions) {
   const bellThrottle = useRef<Record<string, number>>({})
 
-  const handleInput = useCallback((id: string, data: string) => {
-    window.api.writeTerminal(id, data)
-  }, [])
-
   // A long-running job that has gone quiet is worth surfacing — the AI CLIs
   // don't reliably ring the bell when they finish.
   const handleSettled = useCallback(
@@ -367,13 +363,23 @@ function useTerminalController({
     [activeSessionRef, dispatchUi, sessionsRef]
   )
 
-  const { activity, markActivity, forgetTerminal } = useTerminalActivity({
+  const { activity, markSubmitted, markOutput, forgetTerminal } = useTerminalActivity({
     onSettled: handleSettled
   })
+  const markSubmittedRef = useLatestRef(markSubmitted)
+
+  // Submitting a line is what starts a job; plain keystrokes do not.
+  const handleInput = useCallback(
+    (id: string, data: string) => {
+      if (data.includes('\r') || data.includes('\n')) markSubmittedRef.current(id)
+      window.api.writeTerminal(id, data)
+    },
+    [markSubmittedRef]
+  )
 
   useEffect(() => {
     const offData = window.api.onTerminalData((id, data) => {
-      markActivity(id)
+      markOutput(id, data.length)
       terminalBus.push(id, data)
     })
     const offExit = window.api.onTerminalExit((id, code) => {
@@ -385,7 +391,7 @@ function useTerminalController({
       offData()
       offExit()
     }
-  }, [actions, forgetTerminal, markActivity])
+  }, [actions, forgetTerminal, markOutput])
 
   const spawnTerminal = useCallback(
     async (type: TerminalType, cwd: string) => {
