@@ -3,7 +3,9 @@ import { FileExplorer } from './FileExplorer'
 import { CodeEditor } from './CodeEditor'
 import { SplitLayout } from './SplitLayout'
 import { GitPanel } from './GitPanel'
+import { ClipboardPanel } from './ClipboardPanel'
 import { Icon } from './Icon'
+import type { TerminalActivity } from '../hooks/useTerminalActivity'
 import type {
   GitChange,
   GitCommit,
@@ -34,6 +36,7 @@ interface WorkspacePanelsProps {
   sessions: SessionRuntime[]
   activeId: string | null
   activeSession: SessionRuntime | null
+  activity: Record<string, TerminalActivity>
   settings: Settings
   gitStatus: GitStatus
   explorerNonce: number
@@ -45,6 +48,10 @@ interface WorkspacePanelsProps {
   onInput: (id: string, data: string) => void
   onBell: (id: string) => void
   onCwdChange: (id: string, cwd: string) => void
+  onSendContext: (sessionId: string, text: string) => void
+  onDropImage: (sessionId: string, imagePath: string) => void
+  clipboardOpen: boolean
+  onCloseClipboard: () => void
   onOpenFile: (path: string) => void
   onOpenTerminalHere: (cwd: string, type: TerminalType) => void
   onRefresh: () => void
@@ -60,6 +67,7 @@ export function WorkspacePanels({
   sessions,
   activeId,
   activeSession,
+  activity,
   settings,
   gitStatus,
   explorerNonce,
@@ -71,6 +79,10 @@ export function WorkspacePanels({
   onInput,
   onBell,
   onCwdChange,
+  onSendContext,
+  onDropImage,
+  clipboardOpen,
+  onCloseClipboard,
   onOpenFile,
   onOpenTerminalHere,
   onRefresh,
@@ -83,6 +95,14 @@ export function WorkspacePanels({
 }: WorkspacePanelsProps) {
   const monacoTheme = settings.theme === 'light' ? 'vs' : 'tokyo-night'
 
+  // Only the AI CLIs can act on a file reference; cmd/PowerShell would just try
+  // to run it as a command.
+  const aiSessions = sessions.filter(
+    (s) =>
+      s.status === 'running' &&
+      (s.type === 'claude' || s.type === 'codex' || s.type === 'opencode' || s.type === 'antigravity')
+  )
+
   // Pin the right sidebar (file explorer + editor) to ~15% of the window so it stays
   // compact no matter the window size; the terminal flexes to fill the rest.
   const sidebarInitial = Math.max(240, Math.round(window.innerWidth * 0.15))
@@ -91,6 +111,8 @@ export function WorkspacePanels({
     <CodeEditor
       session={activeSession}
       theme={monacoTheme}
+      aiSessions={aiSessions}
+      onSendContext={onSendContext}
       onChangeContent={onChangeContent}
       onSave={onSaveFile}
       onSelectFile={onSelectFile}
@@ -115,6 +137,31 @@ export function WorkspacePanels({
     />
   )
 
+  const explorerAndEditor = (
+    <SplitLayout direction="vertical" initial={320} min={120} storageKey="sidebar-explorer">
+      <FileExplorer
+        rootPath={activeSession?.cwd ?? null}
+        hiddenFolders={settings.hiddenFolders}
+        gitFiles={gitStatus.files}
+        onOpenFile={onOpenFile}
+        onOpenGitDiff={onOpenGitDiff}
+        onOpenTerminalHere={onOpenTerminalHere}
+        aiSessions={aiSessions}
+        onSendContext={onSendContext}
+        refreshNonce={explorerNonce}
+        onRefresh={onRefresh}
+      />
+      {gitPanel.open ? (
+        <SplitLayout direction="vertical" initial={280} min={120} storageKey="git-editor">
+          {gitDock}
+          {editor}
+        </SplitLayout>
+      ) : (
+        editor
+      )}
+    </SplitLayout>
+  )
+
   return (
     <div className="main">
       <SplitLayout
@@ -127,6 +174,7 @@ export function WorkspacePanels({
         <TerminalArea
           sessions={sessions}
           activeId={activeId}
+          activity={activity}
           fontFamily={settings.terminalFont}
           fontSize={settings.terminalFontSize}
           scrollback={settings.terminalScrollback}
@@ -139,11 +187,22 @@ export function WorkspacePanels({
           onInput={onInput}
           onBell={onBell}
           onCwdChange={onCwdChange}
+          onDropImage={onDropImage}
         />
 
         <div className="workspace-sidebar">
           <div className="workspace-sidebar-head">
             <span className="workspace-sidebar-title">Çalışma Alanı</span>
+            <button
+              type="button"
+              className={`btn btn-ghost sidebar-git-toggle ${clipboardOpen ? 'is-on' : ''}`}
+              title="Pano paneli"
+              aria-pressed={clipboardOpen}
+              onClick={onCloseClipboard}
+            >
+              <Icon name="image" size={13} />
+              <span>Pano</span>
+            </button>
             <button
               type="button"
               className={`btn btn-ghost sidebar-git-toggle ${gitPanel.open ? 'is-on' : ''}`}
@@ -159,26 +218,19 @@ export function WorkspacePanels({
             </button>
           </div>
           <div className="workspace-sidebar-body">
-            <SplitLayout direction="vertical" initial={320} min={120} storageKey="sidebar-explorer">
-              <FileExplorer
-                rootPath={activeSession?.cwd ?? null}
-                hiddenFolders={settings.hiddenFolders}
-                gitFiles={gitStatus.files}
-                onOpenFile={onOpenFile}
-                onOpenGitDiff={onOpenGitDiff}
-                onOpenTerminalHere={onOpenTerminalHere}
-                refreshNonce={explorerNonce}
-                onRefresh={onRefresh}
-              />
-              {gitPanel.open ? (
-                <SplitLayout direction="vertical" initial={280} min={120} storageKey="git-editor">
-                  {gitDock}
-                  {editor}
-                </SplitLayout>
-              ) : (
-                editor
-              )}
-            </SplitLayout>
+            {clipboardOpen && (
+              <SplitLayout
+                direction="vertical"
+                initial={220}
+                min={120}
+                anchor="second"
+                storageKey="sidebar-clipboard"
+              >
+                <div className="workspace-sidebar-stack">{explorerAndEditor}</div>
+                <ClipboardPanel open onClose={onCloseClipboard} />
+              </SplitLayout>
+            )}
+            {!clipboardOpen && explorerAndEditor}
           </div>
         </div>
       </SplitLayout>

@@ -13,6 +13,13 @@ export const IPC = {
   COPY_PATH: 'fs:copyPath',
   MOVE_PATH: 'fs:movePath',
   IMPORT_PATHS: 'fs:importPaths',
+
+  // Image clipboard
+  CLIP_LIST: 'clip:list',
+  CLIP_DELETE: 'clip:delete',
+  CLIP_CLEAR: 'clip:clear',
+  CLIP_COPY_BACK: 'clip:copyBack',
+  CLIP_ADDED: 'clip:added',
   RENAME_PATH: 'fs:renamePath',
   WATCH_DIR: 'fs:watchDir',
   FS_CHANGED: 'fs:changed',

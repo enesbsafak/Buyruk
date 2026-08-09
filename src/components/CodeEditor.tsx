@@ -4,11 +4,15 @@ import type { editor as MonacoEditor } from 'monaco-editor'
 import { Icon } from './Icon'
 import { configureMonaco } from '../monaco'
 import { fileIcon } from '../utils/fileIcon'
+import { contextReference } from '../utils/terminalContext'
+import { ContextMenu } from './ContextMenu'
 import type { SessionRuntime } from '../types'
 
 interface CodeEditorProps {
   session: SessionRuntime | null
   theme: string
+  aiSessions: SessionRuntime[]
+  onSendContext: (sessionId: string, text: string) => void
   onChangeContent: (path: string, content: string) => void
   onSave: () => void
   onSelectFile: (path: string) => void
@@ -80,6 +84,8 @@ function EditorFallback() {
 export function CodeEditor({
   session,
   theme,
+  aiSessions,
+  onSendContext,
   onChangeContent,
   onSave,
   onSelectFile,
@@ -94,6 +100,7 @@ export function CodeEditor({
   const monacoRef = useRef<Parameters<OnMount>[1] | null>(null)
   const diffDecorationsRef = useRef<MonacoEditor.IEditorDecorationsCollection | null>(null)
   const [diff, setDiff] = useState(false)
+  const [sendMenu, setSendMenu] = useState<{ x: number; y: number } | null>(null)
 
   const handleMount: OnMount = (editor, monaco) => {
     editorRef.current = editor
@@ -106,6 +113,18 @@ export function CodeEditor({
 
   const formatActive = () =>
     editorRef.current?.getAction('editor.action.formatDocument')?.run()
+
+  // The reference carries the selected line range when there is one, so the CLI
+  // is pointed at the exact block you were looking at.
+  const sendActiveFile = (sessionId: string, path: string) => {
+    const selection = editorRef.current?.getSelection()
+    const range =
+      selection && !selection.isEmpty()
+        ? { start: selection.startLineNumber, end: selection.endLineNumber }
+        : null
+    onSendContext(sessionId, contextReference(path, range))
+    setSendMenu(null)
+  }
 
   // Paint git-diff line backgrounds whenever the visible diff file/content changes.
   const diffFile = session?.openFiles.find((f) => f.path === session.activeFilePath) ?? null
@@ -206,6 +225,25 @@ export function CodeEditor({
             )
           })}
         </div>
+        {active && aiSessions.length > 0 && (
+          <div className="editor-actions" aria-label="Bağlam gönder">
+            <button
+              type="button"
+              className="pane-btn editor-action-btn"
+              title="Bu dosyayı (ve seçili satırları) bir AI terminaline gönder"
+              onClick={(e) => {
+                if (aiSessions.length === 1) {
+                  sendActiveFile(aiSessions[0].id, active.path)
+                  return
+                }
+                const rect = e.currentTarget.getBoundingClientRect()
+                setSendMenu({ x: rect.left, y: rect.bottom + 4 })
+              }}
+            >
+              <Icon name="terminal" size={14} />
+            </button>
+          </div>
+        )}
         {editable && (
           <div className="editor-actions" aria-label="Editör araçları">
             <button
@@ -308,6 +346,19 @@ export function CodeEditor({
 
       {isDirty && diff && (
         <div className="diff-hint">Salt-okunur karşılaştırma · düzenlemek için diff'i kapat</div>
+      )}
+
+      {sendMenu && active && (
+        <ContextMenu
+          x={sendMenu.x}
+          y={sendMenu.y}
+          items={aiSessions.map((s) => ({
+            label: s.title,
+            icon: 'terminal' as const,
+            onClick: () => sendActiveFile(s.id, active.path)
+          }))}
+          onClose={() => setSendMenu(null)}
+        />
       )}
     </div>
   )

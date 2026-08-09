@@ -110,6 +110,20 @@ export interface GitOverview {
   lastUpdated: number
 }
 
+// An image captured from the system clipboard and kept on disk so it can be
+// dropped onto a terminal later.
+export interface ClipboardImage {
+  id: string
+  hash: string
+  path: string
+  width: number
+  height: number
+  bytes: number
+  createdAt: number
+  /** Downscaled data URL used for the panel preview. */
+  thumbnail: string
+}
+
 export type ThemeName = 'dark' | 'light'
 
 export interface Settings {

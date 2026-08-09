@@ -8,6 +8,7 @@ import type { SessionRuntime } from '../types'
 interface TerminalPaneHeaderProps {
   session: SessionRuntime
   exited: boolean
+  busy: boolean
   showSearch: boolean
   zoomed: boolean
   canZoom: boolean
@@ -23,6 +24,7 @@ interface TerminalPaneHeaderProps {
 export function TerminalPaneHeader({
   session,
   exited,
+  busy,
   showSearch,
   zoomed,
   canZoom,
@@ -56,6 +58,12 @@ export function TerminalPaneHeader({
         {session.title}
       </span>
       {exited && <span className="pane-flag">çıkış {session.exitCode ?? '?'}</span>}
+      {!exited && busy && (
+        <span className="pane-busy" title="Çalışıyor">
+          <span className="activity-dot" />
+          <span className="pane-busy-label">çalışıyor</span>
+        </span>
+      )}
       <div className="pane-actions">
         <button
           type="button"

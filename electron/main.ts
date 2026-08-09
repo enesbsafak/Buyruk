@@ -7,6 +7,7 @@ import { TerminalManager } from './terminalManager'
 import { IPC } from './ipcChannels'
 import { loadWindowState, trackWindowState } from './windowState'
 import { registerUpdaterHandlers, startAutoUpdateCheck } from './updater'
+import { registerImageClipboardHandlers, stopImageClipboardWatch } from './imageClipboard'
 import { assertTrustedIpcSender, isSafeDevServerUrl, isTrustedAppUrl } from './security'
 
 let mainWindow: BrowserWindow | null = null
@@ -130,6 +131,7 @@ app.whenReady().then(() => {
   Menu.setApplicationMenu(null) // remove the default top-left application menu
   registerFileSystemHandlers(ipcMain, () => mainWindow)
   terminalManager.registerHandlers(ipcMain)
+  registerImageClipboardHandlers(ipcMain, () => mainWindow)
   registerWindowControls()
   registerUpdaterHandlers(ipcMain, () => mainWindow)
   createWindow()
@@ -148,4 +150,5 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   allowClose = true
   terminalManager.killAll()
+  stopImageClipboardWatch()
 })

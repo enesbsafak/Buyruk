@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Icon } from './Icon'
 import { CliIcon } from './CliIcon'
 import { basename } from '../utils/pathUtils'
-import type { RecentFolder } from '../utils/persistence'
+import type { RecentFolder, WorkspaceProfile } from '../utils/persistence'
 import type { SessionRuntime, TerminalType } from '../types'
 import brandLogo from '../assets/icon.png'
 
@@ -14,6 +14,10 @@ interface ToolbarProps {
   onOpenSettings: () => void
   recents: RecentFolder[]
   onOpenRecent: (recent: RecentFolder) => void
+  profiles: WorkspaceProfile[]
+  onSaveProfile: () => void
+  onOpenProfile: (profile: WorkspaceProfile) => void
+  onDeleteProfile: (profile: WorkspaceProfile) => void
   onUpdateAiTools: () => void
   activeSession: SessionRuntime | null
 }
@@ -35,6 +39,10 @@ export function Toolbar({
   onOpenSettings,
   recents,
   onOpenRecent,
+  profiles,
+  onSaveProfile,
+  onOpenProfile,
+  onDeleteProfile,
   onUpdateAiTools,
   activeSession
 }: ToolbarProps) {
@@ -75,30 +83,77 @@ export function Toolbar({
           type="button"
           className="btn btn-ghost toolbar-action"
           onClick={() => setRecentsOpen((o) => !o)}
-          disabled={recents.length === 0}
-          title="Son klasörler"
+          title="Çalışma alanları ve son klasörler"
         >
           <Icon name="chevron" />
-          <span className="toolbar-label">Son</span>
+          <span className="toolbar-label">Aç</span>
         </button>
         {recentsOpen && (
           <div className="dropdown-panel">
-            {recents.map((r) => (
-              <button
-                type="button"
-                key={r.cwd}
-                className="dropdown-item"
-                title={r.cwd}
-                onClick={() => {
-                  setRecentsOpen(false)
-                  onOpenRecent(r)
-                }}
-              >
-                <CliIcon type={r.type} size={15} />
-                <span className="dropdown-item-name">{basename(r.cwd)}</span>
-                <span className="dropdown-item-path">{r.cwd}</span>
-              </button>
-            ))}
+            {profiles.length > 0 && (
+              <>
+                <div className="dropdown-heading">Çalışma alanları</div>
+                {profiles.map((profile) => (
+                  <div key={profile.id} className="dropdown-row">
+                    <button
+                      type="button"
+                      className="dropdown-item"
+                      title={`${profile.sessions.length} terminal`}
+                      onClick={() => {
+                        setRecentsOpen(false)
+                        onOpenProfile(profile)
+                      }}
+                    >
+                      <Icon name="grid" size={15} />
+                      <span className="dropdown-item-name">{profile.name}</span>
+                      <span className="dropdown-item-path">
+                        {profile.sessions.length} terminal
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      className="dropdown-row-action"
+                      title="Sil"
+                      onClick={() => onDeleteProfile(profile)}
+                    >
+                      <Icon name="trash" size={13} />
+                    </button>
+                  </div>
+                ))}
+                <div className="dropdown-sep" />
+              </>
+            )}
+
+            <button type="button" className="dropdown-item" onClick={() => {
+              setRecentsOpen(false)
+              onSaveProfile()
+            }}>
+              <Icon name="save" size={15} />
+              <span className="dropdown-item-name">Bu düzeni kaydet…</span>
+            </button>
+
+            {recents.length > 0 && (
+              <>
+                <div className="dropdown-sep" />
+                <div className="dropdown-heading">Son klasörler</div>
+                {recents.map((r) => (
+                  <button
+                    type="button"
+                    key={r.cwd}
+                    className="dropdown-item"
+                    title={r.cwd}
+                    onClick={() => {
+                      setRecentsOpen(false)
+                      onOpenRecent(r)
+                    }}
+                  >
+                    <CliIcon type={r.type} size={15} />
+                    <span className="dropdown-item-name">{basename(r.cwd)}</span>
+                    <span className="dropdown-item-path">{r.cwd}</span>
+                  </button>
+                ))}
+              </>
+            )}
           </div>
         )}
       </div>

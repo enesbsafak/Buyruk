@@ -20,6 +20,8 @@ Güvenlik tarafında `contextIsolation: true` ve `nodeIntegration: false` kullan
 
 - CMD, PowerShell, Claude, Codex, OpenCode ve Antigravity oturumları.
 - Izgara veya sekme düzeni; ızgarada sütun sayısı seçilebilir, pane sınırları sürüklenerek yeniden boyutlandırılır, pane'ler sürüklenerek sıralanır. Düzen tercihleri kalıcıdır.
+- Çalışan terminaller başlıkta ve sekmede canlı bir göstergeyle işaretlenir; uzun süren bir iş sen başka yerdeyken bitince bildirim gelir.
+- Çalışma alanı profilleri: açık terminal düzenini isimle kaydet, tek tıkla geri aç.
 - WebGL hızlandırmalı render, tıklanabilir bağlantılar ve Unicode 11 genişlik desteği.
 - Terminal teması uygulama temasını (koyu/açık) takip eder.
 - Her terminal için arama, yeniden başlatma ve zoom kontrolleri.
@@ -41,7 +43,14 @@ Güvenlik tarafında `contextIsolation: true` ve `nodeIntegration: false` kullan
 - Silinen öğeler geri dönüşüm kutusuna taşınır.
 - Git dal bilgisi ve dosya durum rozetleri.
 - Git diff görüntüleme: değişmiş dosyalarda araç çubuğu veya sağ tık menüsüyle read-only `.diff` sekmesi açma.
+- Sağ tık menüsünden dosyayı (çoklu seçimde hepsini) açık bir AI terminaline gönderme; editörde seçili satırlar `dosya.ts:12-40` biçiminde iletilir.
 - `Ctrl+P` ile fuzzy dosya açma.
+
+**Pano**
+
+- Kopyaladığın görseller otomatik yakalanır ve diskte saklanır (son 60 görsel).
+- Panelden bir görseli sürükleyip terminale bırakınca yolu oraya yazılır; AI CLI'ları görseli oradan okur.
+- Görseli panoya geri kopyalama, yolunu kopyalama ve tek tek veya toplu silme.
 
 **Kod editörü**
 

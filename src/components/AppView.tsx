@@ -5,7 +5,8 @@ import { WorkspacePanels } from './WorkspacePanels'
 import { WelcomeScreen } from './WelcomeScreen'
 import { AppOverlays } from './AppOverlays'
 import type { Command } from './CommandPalette'
-import type { RecentFolder } from '../utils/persistence'
+import type { TerminalActivity } from '../hooks/useTerminalActivity'
+import type { RecentFolder, WorkspaceProfile } from '../utils/persistence'
 import type { AppUpdateStatus } from '../updateTypes'
 import type {
   GitChange,
@@ -20,6 +21,7 @@ import type {
 interface AppViewProps {
   activeId: string | null
   activeSession: SessionRuntime | null
+  activity: Record<string, TerminalActivity>
   closePalette: () => void
   closeQuickOpen: () => void
   closeSettings: () => void
@@ -30,6 +32,10 @@ interface AppViewProps {
   gitStatus: GitStatus
   handleBell: (id: string) => void
   handleCwdChange: (id: string, cwd: string) => void
+  handleSendContext: (sessionId: string, text: string) => void
+  handleDropImage: (sessionId: string, imagePath: string) => void
+  clipboardOpen: boolean
+  toggleClipboard: () => void
   handleChangeContent: (path: string, content: string) => void
   handleCheckForUpdates: () => void
   handleCloseActive: () => void
@@ -55,6 +61,10 @@ interface AppViewProps {
   handleCloneRepo: () => void
   handleOpenTerminalHere: (cwd: string, type: TerminalType) => void
   handleRenameSession: (session: SessionRuntime) => void
+  handleSaveProfile: () => void
+  handleOpenProfile: (profile: WorkspaceProfile) => void
+  handleDeleteProfile: (profile: WorkspaceProfile) => void
+  profiles: WorkspaceProfile[]
   handleReorderSessions: (from: number, to: number) => void
   handleRefreshGit: () => void
   handleRestart: (session: SessionRuntime) => void
@@ -78,6 +88,7 @@ interface AppViewProps {
 export function AppView({
   activeId,
   activeSession,
+  activity,
   closePalette,
   closeQuickOpen,
   closeSettings,
@@ -88,6 +99,10 @@ export function AppView({
   gitStatus,
   handleBell,
   handleCwdChange,
+  handleSendContext,
+  handleDropImage,
+  clipboardOpen,
+  toggleClipboard,
   handleChangeContent,
   handleCheckForUpdates,
   handleCloseActive,
@@ -113,6 +128,10 @@ export function AppView({
   handleCloneRepo,
   handleOpenTerminalHere,
   handleRenameSession,
+  handleSaveProfile,
+  handleOpenProfile,
+  handleDeleteProfile,
+  profiles,
   handleReorderSessions,
   handleRefreshGit,
   handleRestart,
@@ -175,6 +194,10 @@ export function AppView({
         onOpenSettings={openSettings}
         recents={recents}
         onOpenRecent={handleOpenRecent}
+        profiles={profiles}
+        onSaveProfile={handleSaveProfile}
+        onOpenProfile={handleOpenProfile}
+        onDeleteProfile={handleDeleteProfile}
         onUpdateAiTools={handleUpdateAiTools}
         activeSession={activeSession}
       />
@@ -191,6 +214,7 @@ export function AppView({
           sessions={sessions}
           activeId={activeId}
           activeSession={activeSession}
+          activity={activity}
           settings={settings}
           gitStatus={gitStatus}
           explorerNonce={explorerNonce}
@@ -202,6 +226,10 @@ export function AppView({
           onInput={handleInput}
           onBell={handleBell}
           onCwdChange={handleCwdChange}
+          onSendContext={handleSendContext}
+          onDropImage={handleDropImage}
+          clipboardOpen={clipboardOpen}
+          onCloseClipboard={toggleClipboard}
           onOpenFile={handleOpenFile}
           onOpenTerminalHere={handleOpenTerminalHere}
           onRefresh={bumpExplorer}

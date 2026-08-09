@@ -4,10 +4,12 @@ import type { Command } from './components/CommandPalette'
 import { useDialog } from './components/DialogProvider'
 import { useLatestRef } from './hooks/useLatestRef'
 import { useSessions } from './hooks/useSessions'
+import { useTerminalActivity } from './hooks/useTerminalActivity'
 import { useSettings } from './hooks/useSettings'
 import { terminalBus } from './terminalBus'
 import { terminalSnapshots } from './terminalSnapshots'
 import { getLanguage, isImageFile } from './utils/language'
+import { contextReference } from './utils/terminalContext'
 import { basename, joinPath } from './utils/pathUtils'
 import { sessionTitle } from './utils/sessionTitle'
 import {
@@ -17,11 +19,15 @@ import {
   sessionHasDirtyFiles
 } from './utils/dirtyFiles'
 import {
+  deleteProfile,
+  loadProfiles,
   loadRecents,
   loadSavedSessions,
   pushRecent,
+  saveProfile,
   saveSessions,
-  type RecentFolder
+  type RecentFolder,
+  type WorkspaceProfile
 } from './utils/persistence'
 import { INITIAL_UPDATE_STATUS, type AppUpdateStatus } from './updateTypes'
 import {
@@ -102,11 +108,13 @@ interface UiState {
   explorerNonce: number
   statusMessage: string
   recents: RecentFolder[]
+  profiles: WorkspaceProfile[]
   gitStatus: GitStatus
   gitOverview: GitOverview
   gitPanelOpen: boolean
   quickOpenOpen: boolean
   paletteOpen: boolean
+  clipboardOpen: boolean
   updateStatus: AppUpdateStatus
 }
 
@@ -115,11 +123,13 @@ type UiAction =
   | { type: 'bump-explorer' }
   | { type: 'set-status-message'; message: string }
   | { type: 'set-recents'; recents: RecentFolder[] }
+  | { type: 'set-profiles'; profiles: WorkspaceProfile[] }
   | { type: 'set-git-status'; gitStatus: GitStatus }
   | { type: 'set-git-overview'; gitOverview: GitOverview }
   | { type: 'toggle-git-panel' }
   | { type: 'set-quick-open'; open: boolean }
   | { type: 'set-palette-open'; open: boolean }
+  | { type: 'toggle-clipboard' }
   | { type: 'set-update-status'; status: AppUpdateStatus }
 
 function createInitialUiState(): UiState {
@@ -128,11 +138,13 @@ function createInitialUiState(): UiState {
     explorerNonce: 0,
     statusMessage: '',
     recents: loadRecents(),
+    profiles: loadProfiles(),
     gitStatus: EMPTY_GIT,
     gitOverview: EMPTY_GIT_OVERVIEW,
     gitPanelOpen: false,
     quickOpenOpen: false,
     paletteOpen: false,
+    clipboardOpen: false,
     updateStatus: INITIAL_UPDATE_STATUS
   }
 }
@@ -147,6 +159,8 @@ function uiReducer(state: UiState, action: UiAction): UiState {
       return { ...state, statusMessage: action.message }
     case 'set-recents':
       return { ...state, recents: action.recents }
+    case 'set-profiles':
+      return { ...state, profiles: action.profiles }
     case 'set-git-status':
       return { ...state, gitStatus: action.gitStatus }
     case 'set-git-overview':
@@ -157,6 +171,8 @@ function uiReducer(state: UiState, action: UiAction): UiState {
       return { ...state, quickOpenOpen: action.open }
     case 'set-palette-open':
       return { ...state, paletteOpen: action.open }
+    case 'toggle-clipboard':
+      return { ...state, clipboardOpen: !state.clipboardOpen }
     case 'set-update-status':
       return { ...state, updateStatus: action.status }
   }
@@ -176,12 +192,16 @@ function currentOpenFile(
 
 interface UseCommandListOptions {
   activeSession: SessionRuntime | null
+  profiles: WorkspaceProfile[]
+  onSaveProfile: () => void
+  onOpenProfile: (profile: WorkspaceProfile) => void
   settings: Settings
   onNewTerminal: (type: TerminalType) => void
   onOpenFolder: () => void
   onNewFolder: () => void
   onCloneRepo: () => void
   onUpdateAiTools: () => void
+  onToggleClipboard: () => void
   onSaveFile: () => void
   onCloseActive: () => void
   onRestart: (session: SessionRuntime) => void
@@ -191,12 +211,16 @@ interface UseCommandListOptions {
 
 function useCommandList({
   activeSession,
+  profiles,
+  onSaveProfile,
+  onOpenProfile,
   settings,
   onNewTerminal,
   onOpenFolder,
   onNewFolder,
   onCloneRepo,
   onUpdateAiTools,
+  onToggleClipboard,
   onSaveFile,
   onCloseActive,
   onRestart,
@@ -214,7 +238,16 @@ function useCommandList({
       { id: 'open-folder', label: 'Klasör Aç (workspace değiştir)', icon: 'folder', run: onOpenFolder },
       { id: 'new-folder', label: 'Yeni Klasör', icon: 'folder-plus', run: onNewFolder },
       { id: 'clone-repo', label: "GitHub'dan Klonla", icon: 'download', run: onCloneRepo },
+      { id: 'save-profile', label: 'Çalışma Alanını Kaydet', icon: 'save', run: onSaveProfile },
+      ...profiles.map((profile) => ({
+        id: `profile-${profile.id}`,
+        label: `Çalışma Alanı: ${profile.name}`,
+        hint: `${profile.sessions.length} terminal`,
+        icon: 'grid' as const,
+        run: () => onOpenProfile(profile)
+      })),
       { id: 'update-ai-tools', label: 'AI Araçlarını Güncelle', icon: 'refresh', run: onUpdateAiTools },
+      { id: 'clipboard', label: 'Pano Panelini Aç/Kapat', icon: 'image', run: onToggleClipboard },
       { id: 'quick-open', label: 'Hızlı Dosya Aç', hint: 'Ctrl+P', icon: 'search', run: () => activeSession && dispatchUi({ type: 'set-quick-open', open: true }) },
       { id: 'save', label: 'Dosyayı Kaydet', hint: 'Ctrl+S', icon: 'save', run: onSaveFile },
       { id: 'close-term', label: 'Aktif Terminali Kapat', icon: 'close', run: onCloseActive },
@@ -232,12 +265,16 @@ function useCommandList({
     return list
   }, [
     activeSession,
+    profiles,
+    onSaveProfile,
+    onOpenProfile,
     settings,
     onNewTerminal,
     onOpenFolder,
     onNewFolder,
     onCloneRepo,
     onUpdateAiTools,
+    onToggleClipboard,
     onSaveFile,
     onCloseActive,
     onRestart,
@@ -309,17 +346,46 @@ function useTerminalController({
     window.api.writeTerminal(id, data)
   }, [])
 
+  // A long-running job that has gone quiet is worth surfacing — the AI CLIs
+  // don't reliably ring the bell when they finish.
+  const handleSettled = useCallback(
+    (id: string, busyMs: number) => {
+      const session = sessionsRef.current.find((item) => item.id === id)
+      if (!session) return
+      const unfocused = document.hidden || !document.hasFocus()
+      if (!unfocused && id === activeSessionRef.current?.id) return
+      const seconds = Math.round(busyMs / 1000)
+      try {
+        new Notification(`Buyruk · ${session.title}`, {
+          body: `İşlem tamamlandı (${seconds} sn)`
+        })
+      } catch {
+        // notifications may be unavailable
+      }
+      dispatchUi({ type: 'set-status-message', message: `${session.title}: işlem bitti` })
+    },
+    [activeSessionRef, dispatchUi, sessionsRef]
+  )
+
+  const { activity, markActivity, forgetTerminal } = useTerminalActivity({
+    onSettled: handleSettled
+  })
+
   useEffect(() => {
-    const offData = window.api.onTerminalData((id, data) => terminalBus.push(id, data))
+    const offData = window.api.onTerminalData((id, data) => {
+      markActivity(id)
+      terminalBus.push(id, data)
+    })
     const offExit = window.api.onTerminalExit((id, code) => {
       terminalBus.push(id, `\r\n\x1b[33m[süreç ${code} koduyla kapandı]\x1b[0m\r\n`)
       actions.setStatus(id, 'exited', code)
+      forgetTerminal(id)
     })
     return () => {
       offData()
       offExit()
     }
-  }, [actions])
+  }, [actions, forgetTerminal, markActivity])
 
   const spawnTerminal = useCallback(
     async (type: TerminalType, cwd: string) => {
@@ -434,6 +500,89 @@ function useTerminalController({
     [spawnTerminal]
   )
 
+  const handleSaveProfile = useCallback(async () => {
+    const open = sessionsRef.current
+    if (open.length === 0) {
+      dialog.notify('Kaydedilecek açık terminal yok.', 'info')
+      return
+    }
+    const name = await dialog.prompt({
+      title: 'Çalışma Alanını Kaydet',
+      label: `${open.length} terminal kaydedilecek`,
+      placeholder: 'Örn. Buyruk geliştirme',
+      confirmText: 'Kaydet'
+    })
+    if (!name) return
+    const profiles = saveProfile(
+      name.trim(),
+      open.map((s) => ({ type: s.type, cwd: s.cwd, title: s.title }))
+    )
+    dispatchUi({ type: 'set-profiles', profiles })
+    dialog.notify(`Çalışma alanı kaydedildi: ${name.trim()}`, 'success')
+  }, [dialog, dispatchUi, sessionsRef])
+
+  const handleOpenProfile = useCallback(
+    async (profile: WorkspaceProfile) => {
+      if (sessionsRef.current.length > 0) {
+        const ok = await dialog.confirm({
+          title: profile.name,
+          message: `Açık ${sessionsRef.current.length} terminal kapatılıp bu çalışma alanı açılsın mı?`,
+          confirmText: 'Aç'
+        })
+        if (!ok) return
+        for (const session of [...sessionsRef.current]) {
+          try {
+            await window.api.killTerminal(session.id)
+          } catch {
+            // already gone
+          }
+          terminalBus.clear(session.id)
+          actions.remove(session.id)
+        }
+      }
+
+      dispatchUi({ type: 'set-status-message', message: `${profile.name} açılıyor…` })
+      let failed = 0
+      for (const saved of profile.sessions) {
+        try {
+          const session = await window.api.createTerminal({
+            type: saved.type,
+            cwd: saved.cwd,
+            command: commandFor(saved.type, settings),
+            cols: 80,
+            rows: 24,
+            shellIntegration: settings.trackShellCwd
+          })
+          actions.add(session)
+          if (saved.title) actions.rename(session.id, saved.title)
+        } catch {
+          failed += 1
+        }
+      }
+      dispatchUi({
+        type: 'set-status-message',
+        message: failed
+          ? `${profile.name} açıldı · ${failed} terminal başlatılamadı`
+          : `${profile.name} açıldı`
+      })
+    },
+    [actions, dialog, dispatchUi, sessionsRef, settings]
+  )
+
+  const handleDeleteProfile = useCallback(
+    async (profile: WorkspaceProfile) => {
+      const ok = await dialog.confirm({
+        title: 'Çalışma Alanını Sil',
+        message: `"${profile.name}" silinsin mi?`,
+        danger: true,
+        confirmText: 'Sil'
+      })
+      if (!ok) return
+      dispatchUi({ type: 'set-profiles', profiles: deleteProfile(profile.id) })
+    },
+    [dialog, dispatchUi]
+  )
+
   const handleRenameSession = useCallback(
     async (session: SessionRuntime) => {
       const title = await dialog.prompt({
@@ -487,14 +636,37 @@ function useTerminalController({
         // already gone
       }
       terminalBus.clear(id)
+      forgetTerminal(id)
       actions.remove(id)
     },
-    [actions, dialog, sessionsRef]
+    [actions, dialog, forgetTerminal, sessionsRef]
   )
 
   const handleCloseActive = useCallback(() => {
     if (activeId) handleCloseSession(activeId)
   }, [activeId, handleCloseSession])
+
+  // Dropping a captured image writes its path — the AI CLIs read images from disk.
+  const handleDropImage = useCallback(
+    (sessionId: string, imagePath: string) => {
+      window.api.writeTerminal(sessionId, contextReference(imagePath))
+      dispatchUi({ type: 'set-status-message', message: 'Görsel yolu terminale eklendi' })
+    },
+    [dispatchUi]
+  )
+
+  // Types a file reference into an AI terminal without submitting it, so you can
+  // add your question before hitting Enter.
+  const handleSendContext = useCallback(
+    (sessionId: string, text: string) => {
+      const session = sessionsRef.current.find((item) => item.id === sessionId)
+      if (!session) return
+      window.api.writeTerminal(sessionId, text)
+      actions.setActive(sessionId)
+      dispatchUi({ type: 'set-status-message', message: `${session.title} · bağlam gönderildi` })
+    },
+    [actions, dispatchUi, sessionsRef]
+  )
 
   // Reported by the shell through OSC 7 — keeps the explorer on the folder the
   // terminal actually sits in after a `cd`.
@@ -508,8 +680,11 @@ function useTerminalController({
   )
 
   return {
+    activity,
     handleInput,
     handleCwdChange,
+    handleSendContext,
+    handleDropImage,
     handleNewTerminal,
     handleOpenRecent,
     handleCloneRepo,
@@ -517,6 +692,9 @@ function useTerminalController({
     handleUpdateAiTools,
     handleOpenTerminalHere,
     handleRenameSession,
+    handleSaveProfile,
+    handleOpenProfile,
+    handleDeleteProfile,
     handleBell,
     handleCloseSession,
     handleCloseActive
@@ -1015,11 +1193,13 @@ function useAppModel() {
     explorerNonce,
     statusMessage,
     recents,
+    profiles,
     gitStatus,
     gitOverview,
     gitPanelOpen,
     quickOpenOpen,
     paletteOpen,
+    clipboardOpen,
     updateStatus
   } = ui
   const restoredRef = useRef(false)
@@ -1034,6 +1214,7 @@ function useAppModel() {
     []
   )
   const toggleGitPanel = useCallback(() => dispatchUi({ type: 'toggle-git-panel' }), [])
+  const toggleClipboard = useCallback(() => dispatchUi({ type: 'toggle-clipboard' }), [])
   const closeQuickOpen = useCallback(() => dispatchUi({ type: 'set-quick-open', open: false }), [])
   const closePalette = useCallback(() => dispatchUi({ type: 'set-palette-open', open: false }), [])
   const closeSettings = useCallback(
@@ -1042,8 +1223,11 @@ function useAppModel() {
   )
 
   const {
+    activity,
     handleInput,
     handleCwdChange,
+    handleSendContext,
+    handleDropImage,
     handleNewTerminal,
     handleOpenRecent,
     handleCloneRepo,
@@ -1051,6 +1235,9 @@ function useAppModel() {
     handleUpdateAiTools,
     handleOpenTerminalHere,
     handleRenameSession,
+    handleSaveProfile,
+    handleOpenProfile,
+    handleDeleteProfile,
     handleBell,
     handleCloseSession,
     handleCloseActive
@@ -1235,12 +1422,16 @@ function useAppModel() {
 
   const commands = useCommandList({
     activeSession,
+    profiles,
+    onSaveProfile: handleSaveProfile,
+    onOpenProfile: handleOpenProfile,
     settings,
     onNewTerminal: handleNewTerminal,
     onOpenFolder: handleOpenFolder,
     onNewFolder: handleNewFolder,
     onCloneRepo: handleCloneRepo,
     onUpdateAiTools: handleUpdateAiTools,
+    onToggleClipboard: toggleClipboard,
     onSaveFile: saveActiveFile,
     onCloseActive: handleCloseActive,
     onRestart: handleRestart,
@@ -1251,6 +1442,7 @@ function useAppModel() {
   return {
     activeId,
     activeSession,
+    activity,
     closePalette,
     closeQuickOpen,
     closeSettings,
@@ -1266,6 +1458,8 @@ function useAppModel() {
     handleCloseFile,
     handleCloseSession,
     handleCwdChange,
+    handleSendContext,
+    handleDropImage,
     handleInstallUpdate,
     handleUpdateAiTools,
     handleFetchGit,
@@ -1286,6 +1480,10 @@ function useAppModel() {
     handleCloneRepo,
     handleOpenTerminalHere,
     handleRenameSession,
+    handleSaveProfile,
+    handleOpenProfile,
+    handleDeleteProfile,
+    profiles,
     handleReorderSessions: actions.reorder,
     handleRefreshGit,
     handleRestart,
@@ -1301,6 +1499,8 @@ function useAppModel() {
     settingsOpen,
     statusMessage,
     toggleGitPanel,
+    toggleClipboard,
+    clipboardOpen,
     updateStatus,
     setActiveSession: actions.setActive,
     bumpExplorer

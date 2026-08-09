@@ -1,7 +1,7 @@
 import { clipboard, contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC } from './ipcChannels'
 import type { AppUpdateStatus } from '../src/updateTypes'
-import type { GitOverview } from '../src/types'
+import type { ClipboardImage, GitOverview } from '../src/types'
 
 export interface FileNode {
   name: string
@@ -114,6 +114,19 @@ const api = {
   // ---- Clipboard ----
   clipboardReadText: (): string => clipboard.readText(),
   clipboardHasImage: (): boolean => !clipboard.readImage().isEmpty(),
+
+  // ---- Captured clipboard images ----
+  clipImages: {
+    list: (): Promise<ClipboardImage[]> => ipcRenderer.invoke(IPC.CLIP_LIST),
+    remove: (id: string): Promise<ClipboardImage[]> => ipcRenderer.invoke(IPC.CLIP_DELETE, id),
+    clear: (): Promise<ClipboardImage[]> => ipcRenderer.invoke(IPC.CLIP_CLEAR),
+    copyBack: (id: string): Promise<void> => ipcRenderer.invoke(IPC.CLIP_COPY_BACK, id),
+    onAdded: (callback: (image: ClipboardImage) => void): (() => void) => {
+      const listener = (_e: unknown, image: ClipboardImage) => callback(image)
+      ipcRenderer.on(IPC.CLIP_ADDED, listener)
+      return () => ipcRenderer.removeListener(IPC.CLIP_ADDED, listener)
+    }
+  },
 
   // ---- Terminal ----
   createTerminal: (options: CreateTerminalOptions): Promise<TerminalSession> =>

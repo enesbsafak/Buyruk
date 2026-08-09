@@ -213,6 +213,40 @@ button {
   background: var(--border);
   margin: 4px 2px;
 }
+.dropdown-heading {
+  padding: 5px 9px 3px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+/* A row whose primary action fills the width, with a trailing icon button. */
+.dropdown-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.dropdown-row .dropdown-item {
+  flex: 1;
+  min-width: 0;
+}
+.dropdown-row-action {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.dropdown-row-action:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
 .dropdown-check-item {
   align-items: center;
 }
@@ -663,6 +697,50 @@ button {
   border-radius: 999px;
   background: var(--warning);
   flex: 0 0 auto;
+}
+
+/* Output is still flowing — the terminal is working on something. */
+.activity-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--success);
+  flex: 0 0 auto;
+  animation: activity-pulse 1.4s ease-in-out infinite;
+}
+.pane-busy {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  padding: 1px 7px 1px 5px;
+  border-radius: 999px;
+  background: rgba(158, 206, 106, 0.12);
+  color: var(--success);
+  font-size: 10px;
+  font-weight: 500;
+}
+@keyframes activity-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.82);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .activity-dot {
+    animation: none;
+  }
+}
+/* Narrow panes keep the dot but drop the word. */
+@media (max-width: 1120px) {
+  .pane-busy-label {
+    display: none;
+  }
 }
 .layout-tab-close {
   display: grid;
@@ -2116,6 +2194,94 @@ dialog.modal::backdrop {
   opacity: 0.4;
   cursor: not-allowed;
 }
+/* ---------- Clipboard panel ---------- */
+.clip-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg-1);
+  border-top: 1px solid var(--border);
+}
+.workspace-sidebar-stack {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.clip-grid {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 8px;
+  padding: 8px;
+  align-content: start;
+}
+.clip-item {
+  position: relative;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-2);
+  overflow: hidden;
+  cursor: grab;
+  transition: border-color 0.15s var(--ease), transform 0.05s var(--ease);
+}
+.clip-item:hover {
+  border-color: var(--accent-border);
+}
+.clip-item:active {
+  cursor: grabbing;
+  transform: scale(0.985);
+}
+.clip-thumb {
+  display: block;
+  width: 100%;
+  height: 74px;
+  object-fit: cover;
+  background: var(--bg-0);
+  pointer-events: none;
+}
+.clip-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 6px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.clip-dims {
+  font-variant-numeric: tabular-nums;
+}
+/* Row of actions revealed on hover so the tiles stay clean. */
+.clip-actions {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  display: flex;
+  gap: 1px;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg-0) 82%, transparent);
+  opacity: 0;
+  transition: opacity 0.15s var(--ease);
+}
+.clip-item:hover .clip-actions,
+.clip-item:focus-within .clip-actions {
+  opacity: 1;
+}
+.clip-actions .icon-btn {
+  width: 22px;
+  height: 20px;
+}
+.terminal-pane.is-drop {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
 /* ---------- Crash screen ---------- */
 .crash-screen {
   display: grid;

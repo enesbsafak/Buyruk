@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFileTree, type TreeRow } from '../hooks/useFileTree'
 import { basename, dirname, joinPath } from '../utils/pathUtils'
 import { fileIcon } from '../utils/fileIcon'
+import { contextReference } from '../utils/terminalContext'
 import { useDialog } from './DialogProvider'
 import { Icon } from './Icon'
 import { ContextMenu, type MenuItem } from './ContextMenu'
-import type { FileNode, TerminalType } from '../types'
+import type { FileNode, SessionRuntime, TerminalType } from '../types'
 
 const ROW_HEIGHT = 24
 // Below this many rows the whole tree is cheap to render; above it we only mount
@@ -53,6 +54,8 @@ interface FileExplorerProps {
   onOpenFile: (path: string) => void
   onOpenGitDiff: (path: string) => void
   onOpenTerminalHere: (cwd: string, type: TerminalType) => void
+  aiSessions: SessionRuntime[]
+  onSendContext: (sessionId: string, text: string) => void
   refreshNonce: number
   onRefresh: () => void
 }
@@ -84,6 +87,8 @@ function FileExplorerContent({
   onOpenFile,
   onOpenGitDiff,
   onOpenTerminalHere,
+  aiSessions,
+  onSendContext,
   refreshNonce,
   onRefresh
 }: FileExplorerProps & { rootPath: string }) {
@@ -531,6 +536,27 @@ function FileExplorerContent({
         }
       }
 
+      if (aiSessions.length > 0) {
+        const send = (sessionId: string) =>
+          onSendContext(sessionId, targets.map((path) => contextReference(path)).join(''))
+        items.push(
+          aiSessions.length === 1
+            ? {
+                label: `${aiSessions[0].title} · AI'a gönder`,
+                icon: 'terminal',
+                onClick: () => send(aiSessions[0].id)
+              }
+            : {
+                label: "AI'a gönder",
+                icon: 'terminal',
+                submenu: aiSessions.map((s) => ({
+                  label: s.title,
+                  icon: 'terminal' as const,
+                  onClick: () => send(s.id)
+                }))
+              }
+        )
+      }
       items.push({
         label: 'Burada terminal aç',
         icon: 'terminal',
@@ -594,6 +620,7 @@ function FileExplorerContent({
       return items
     },
     [
+      aiSessions,
       clipboard,
       gitFiles,
       handleDelete,

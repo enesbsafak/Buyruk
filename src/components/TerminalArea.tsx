@@ -3,11 +3,13 @@ import { Icon } from './Icon'
 import { CliIcon } from './CliIcon'
 import { TerminalPane } from './TerminalPane'
 import { useTerminalLayout } from '../hooks/useTerminalLayout'
+import type { TerminalActivity } from '../hooks/useTerminalActivity'
 import type { SessionRuntime, ThemeName } from '../types'
 
 interface TerminalAreaProps {
   sessions: SessionRuntime[]
   activeId: string | null
+  activity: Record<string, TerminalActivity>
   fontFamily: string
   fontSize: number
   scrollback: number
@@ -20,6 +22,7 @@ interface TerminalAreaProps {
   onInput: (id: string, data: string) => void
   onBell: (id: string) => void
   onCwdChange: (id: string, cwd: string) => void
+  onDropImage: (sessionId: string, imagePath: string) => void
 }
 
 const COLUMN_CHOICES = [
@@ -33,6 +36,7 @@ const COLUMN_CHOICES = [
 export function TerminalArea({
   sessions,
   activeId,
+  activity,
   fontFamily,
   fontSize,
   scrollback,
@@ -44,7 +48,8 @@ export function TerminalArea({
   onReorder,
   onInput,
   onBell,
-  onCwdChange
+  onCwdChange,
+  onDropImage
 }: TerminalAreaProps) {
   const [zoomedId, setZoomedId] = useState<string | null>(null)
   const [dragIndex, setDragIndex] = useState<number | null>(null)
@@ -196,7 +201,11 @@ export function TerminalArea({
               >
                 <CliIcon type={s.type} size={13} />
                 <span className="layout-tab-label">{s.title}</span>
-                {s.status === 'exited' && <span className="layout-tab-dot" />}
+                {s.status === 'exited' ? (
+                  <span className="layout-tab-dot" />
+                ) : (
+                  activity[s.id] === 'busy' && <span className="activity-dot" aria-label="çalışıyor" />
+                )}
                 <span
                   className="layout-tab-close"
                   role="presentation"
@@ -256,6 +265,7 @@ export function TerminalArea({
                 key={`${s.id}:${s.gen}`}
                 session={s}
                 active={s.id === activeId}
+                busy={activity[s.id] === 'busy'}
                 zoomed={s.id === soloId}
                 canZoom={!tabs}
                 fontFamily={fontFamily}
@@ -270,6 +280,7 @@ export function TerminalArea({
                 onInput={onInput}
                 onBell={onBell}
                 onCwdChange={onCwdChange}
+                onDropImage={onDropImage}
                 onDragStart={() => setDragIndex(i)}
                 onDragEnd={() => {
                   setDragIndex(null)

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import '@xterm/xterm/css/xterm.css'
 import { ContextMenu, type MenuItem } from './ContextMenu'
+import { CLIP_DRAG_TYPE } from './ClipboardPanel'
 import { terminalSnapshots } from '../terminalSnapshots'
 import {
   TerminalExitOverlay,
@@ -19,6 +20,7 @@ import type { SessionRuntime, ThemeName } from '../types'
 interface TerminalPaneProps {
   session: SessionRuntime
   active: boolean
+  busy: boolean
   zoomed: boolean
   canZoom: boolean
   fontFamily: string
@@ -33,6 +35,7 @@ interface TerminalPaneProps {
   onInput: (id: string, data: string) => void
   onBell: (id: string) => void
   onCwdChange: (id: string, cwd: string) => void
+  onDropImage: (sessionId: string, imagePath: string) => void
   onDragStart: () => void
   onDragEnd: () => void
 }
@@ -44,6 +47,7 @@ function sameScrollState(a: TerminalScrollState, b: TerminalScrollState) {
 export function TerminalPane({
   session,
   active,
+  busy,
   zoomed,
   canZoom,
   fontFamily,
@@ -58,6 +62,7 @@ export function TerminalPane({
   onInput,
   onBell,
   onCwdChange,
+  onDropImage,
   onDragStart,
   onDragEnd
 }: TerminalPaneProps) {
@@ -67,6 +72,7 @@ export function TerminalPane({
   const [searchTerm, setSearchTerm] = useState('')
   const [scrollState, setScrollState] = useState(INITIAL_TERMINAL_SCROLL)
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
+  const [dropActive, setDropActive] = useState(false)
 
   const handleScrollStateChange = useCallback((next: TerminalScrollState) => {
     setScrollState((prev) => (sameScrollState(prev, next) ? prev : next))
@@ -141,17 +147,38 @@ export function TerminalPane({
 
   return (
     <section
-      className={`terminal-pane ${active ? 'is-active' : ''} ${exited ? 'is-exited' : ''}`}
+      className={`terminal-pane ${active ? 'is-active' : ''} ${exited ? 'is-exited' : ''} ${
+        dropActive ? 'is-drop' : ''
+      }`}
       aria-label={`Terminal ${session.title}`}
       onPointerDown={() => onSelect(session.id)}
       onContextMenu={(e) => {
         e.preventDefault()
         setMenu({ x: e.clientX, y: e.clientY })
       }}
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes(CLIP_DRAG_TYPE)) return
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'copy'
+        setDropActive(true)
+      }}
+      onDragLeave={(e) => {
+        if (e.currentTarget === e.target) setDropActive(false)
+      }}
+      onDrop={(e) => {
+        const path = e.dataTransfer.getData(CLIP_DRAG_TYPE)
+        setDropActive(false)
+        if (!path) return
+        e.preventDefault()
+        e.stopPropagation()
+        onSelect(session.id)
+        onDropImage(session.id, path)
+      }}
     >
       <TerminalPaneHeader
         session={session}
         exited={exited}
+        busy={busy}
         showSearch={showSearch}
         zoomed={zoomed}
         canZoom={canZoom}

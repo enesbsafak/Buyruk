@@ -56,6 +56,62 @@ export function saveTerminalLayout(layout: TerminalLayout): void {
   }
 }
 
+// ---- Workspace profiles ----
+
+const PROFILES_KEY = 'multicli.profiles'
+const MAX_PROFILES = 24
+
+export interface WorkspaceProfile {
+  id: string
+  name: string
+  /** Terminals to spawn, in order. Layout preferences stay global. */
+  sessions: { type: TerminalType; cwd: string; title: string }[]
+}
+
+export function loadProfiles(): WorkspaceProfile[] {
+  try {
+    const raw = localStorage.getItem(PROFILES_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) return []
+    return parsed.flatMap((item) => {
+      const profile = item as Partial<WorkspaceProfile>
+      if (typeof profile.id !== 'string' || typeof profile.name !== 'string') return []
+      if (!Array.isArray(profile.sessions)) return []
+      return [{ id: profile.id, name: profile.name, sessions: profile.sessions }]
+    })
+  } catch {
+    return []
+  }
+}
+
+function writeProfiles(list: WorkspaceProfile[]): WorkspaceProfile[] {
+  const trimmed = list.slice(0, MAX_PROFILES)
+  try {
+    localStorage.setItem(PROFILES_KEY, JSON.stringify(trimmed))
+  } catch {
+    // ignore
+  }
+  return trimmed
+}
+
+// Saving under an existing name replaces it, so re-saving a profile after
+// rearranging terminals does the obvious thing.
+export function saveProfile(name: string, sessions: WorkspaceProfile['sessions']): WorkspaceProfile[] {
+  const existing = loadProfiles()
+  const match = existing.find((p) => p.name.toLowerCase() === name.toLowerCase())
+  const profile: WorkspaceProfile = {
+    id: match?.id ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name,
+    sessions
+  }
+  return writeProfiles([profile, ...existing.filter((p) => p.id !== profile.id)])
+}
+
+export function deleteProfile(id: string): WorkspaceProfile[] {
+  return writeProfiles(loadProfiles().filter((p) => p.id !== id))
+}
+
 // Which explorer folders were open, remembered per workspace root so reopening a
 // project lands you back on the same view instead of a fully collapsed tree.
 const EXPANDED_PREFIX = 'multicli.expanded.'

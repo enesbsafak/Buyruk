@@ -1,4 +1,5 @@
 import type {
+  ClipboardImage,
   CreateTerminalOptions,
   FileNode,
   GitBranches,
@@ -56,6 +57,14 @@ declare global {
       // Clipboard
       clipboardReadText(): string
       clipboardHasImage(): boolean
+
+      clipImages: {
+        list(): Promise<ClipboardImage[]>
+        remove(id: string): Promise<ClipboardImage[]>
+        clear(): Promise<ClipboardImage[]>
+        copyBack(id: string): Promise<void>
+        onAdded(callback: (image: ClipboardImage) => void): () => void
+      }
 
       // Terminal
       createTerminal(options: CreateTerminalOptions): Promise<TerminalSession>
