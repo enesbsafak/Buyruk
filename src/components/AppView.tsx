@@ -20,7 +20,6 @@ import type {
 interface AppViewProps {
   activeId: string | null
   activeSession: SessionRuntime | null
-  broadcast: boolean
   closePalette: () => void
   closeQuickOpen: () => void
   closeSettings: () => void
@@ -31,7 +30,6 @@ interface AppViewProps {
   gitStatus: GitStatus
   handleBell: (id: string) => void
   handleCwdChange: (id: string, cwd: string) => void
-  handleBroadcastPrompt: () => void
   handleChangeContent: (path: string, content: string) => void
   handleCheckForUpdates: () => void
   handleCloseActive: () => void
@@ -71,7 +69,6 @@ interface AppViewProps {
   settings: Settings
   settingsOpen: boolean
   statusMessage: string
-  toggleBroadcast: () => void
   toggleGitPanel: () => void
   updateStatus: AppUpdateStatus
   setActiveSession: (id: string) => void
@@ -81,7 +78,6 @@ interface AppViewProps {
 export function AppView({
   activeId,
   activeSession,
-  broadcast,
   closePalette,
   closeQuickOpen,
   closeSettings,
@@ -92,7 +88,6 @@ export function AppView({
   gitStatus,
   handleBell,
   handleCwdChange,
-  handleBroadcastPrompt,
   handleChangeContent,
   handleCheckForUpdates,
   handleCloseActive,
@@ -132,7 +127,6 @@ export function AppView({
   settings,
   settingsOpen,
   statusMessage,
-  toggleBroadcast,
   toggleGitPanel,
   updateStatus,
   setActiveSession,
@@ -198,7 +192,6 @@ export function AppView({
           activeId={activeId}
           activeSession={activeSession}
           settings={settings}
-          broadcast={broadcast}
           gitStatus={gitStatus}
           explorerNonce={explorerNonce}
           onSelectSession={setActiveSession}
@@ -209,7 +202,6 @@ export function AppView({
           onInput={handleInput}
           onBell={handleBell}
           onCwdChange={handleCwdChange}
-          onToggleBroadcast={toggleBroadcast}
           onOpenFile={handleOpenFile}
           onOpenTerminalHere={handleOpenTerminalHere}
           onRefresh={bumpExplorer}

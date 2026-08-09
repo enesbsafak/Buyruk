@@ -24,8 +24,6 @@ Güvenlik tarafında `contextIsolation: true` ve `nodeIntegration: false` kullan
 - Terminal teması uygulama temasını (koyu/açık) takip eder.
 - Her terminal için arama, yeniden başlatma ve zoom kontrolleri.
 - Sağ tık menüsü: kopyala, yapıştır, tümünü seç, ara, ekranı temizle.
-- Broadcast modu ile girişi tüm terminallere aynı anda gönderme.
-- Aktif terminale hızlı prompt gönderme.
 - Oturumlar, son klasörler ve terminal geçmişinin son satırları kalıcı saklanır; uygulama yeniden açıldığında ekran geri yüklenir.
 - Shell klasör takibi (OSC 7): CMD ve PowerShell oturumlarında `cd` yapıldığında dosya gezgini takip eder. Ayarlardan kapatılabilir.
 - Claude Code oturumlarında clipboard'da görsel varken `Ctrl+V` ile görsel yapıştırma.

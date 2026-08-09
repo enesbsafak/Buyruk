@@ -3,6 +3,7 @@ import type { OnMount } from '@monaco-editor/react'
 import type { editor as MonacoEditor } from 'monaco-editor'
 import { Icon } from './Icon'
 import { configureMonaco } from '../monaco'
+import { fileIcon } from '../utils/fileIcon'
 import type { SessionRuntime } from '../types'
 
 interface CodeEditorProps {
@@ -157,6 +158,7 @@ export function CodeEditor({
         <div className="editor-tabs" aria-label="Açık dosyalar">
           {files.map((f) => {
             const dirty = !f.readOnly && !f.isBinary && !f.isImage && f.content !== f.savedContent
+            const spec = fileIcon(f.name)
             return (
               <div
                 key={f.path}
@@ -181,8 +183,8 @@ export function CodeEditor({
                     }
                   }}
                 >
-                  <span className="tab-ico">
-                    <Icon name={f.isImage ? 'file' : 'file'} size={14} />
+                  <span className={`tab-ico tone-${spec.tone}`}>
+                    <Icon name={f.readOnly ? 'git-diff' : spec.icon} size={14} />
                   </span>
                   <span className="editor-tab-name">
                     <span className="editor-tab-title">{f.name}</span>
@@ -238,7 +240,7 @@ export function CodeEditor({
               <Icon name="file" size={24} />
             </div>
             <div className="placeholder-text">
-              Dosya seçilmedi. Soldaki dosya yöneticisinden bir dosyaya tıkla (veya Ctrl+P).
+              Dosya seçilmedi. Yukarıdaki dosya yöneticisinden bir dosyaya tıkla (veya Ctrl+P).
             </div>
           </div>
         )}

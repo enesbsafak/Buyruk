@@ -35,7 +35,6 @@ interface WorkspacePanelsProps {
   activeId: string | null
   activeSession: SessionRuntime | null
   settings: Settings
-  broadcast: boolean
   gitStatus: GitStatus
   explorerNonce: number
   onSelectSession: (id: string) => void
@@ -46,7 +45,6 @@ interface WorkspacePanelsProps {
   onInput: (id: string, data: string) => void
   onBell: (id: string) => void
   onCwdChange: (id: string, cwd: string) => void
-  onToggleBroadcast: () => void
   onOpenFile: (path: string) => void
   onOpenTerminalHere: (cwd: string, type: TerminalType) => void
   onRefresh: () => void
@@ -63,7 +61,6 @@ export function WorkspacePanels({
   activeId,
   activeSession,
   settings,
-  broadcast,
   gitStatus,
   explorerNonce,
   onSelectSession,
@@ -74,7 +71,6 @@ export function WorkspacePanels({
   onInput,
   onBell,
   onCwdChange,
-  onToggleBroadcast,
   onOpenFile,
   onOpenTerminalHere,
   onRefresh,
@@ -135,7 +131,6 @@ export function WorkspacePanels({
           fontSize={settings.terminalFontSize}
           scrollback={settings.terminalScrollback}
           theme={settings.theme}
-          broadcast={broadcast}
           onSelect={onSelectSession}
           onClose={onCloseSession}
           onRestart={onRestart}
@@ -144,7 +139,6 @@ export function WorkspacePanels({
           onInput={onInput}
           onBell={onBell}
           onCwdChange={onCwdChange}
-          onToggleBroadcast={onToggleBroadcast}
         />
 
         <div className="workspace-sidebar">

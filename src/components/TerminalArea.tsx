@@ -12,7 +12,6 @@ interface TerminalAreaProps {
   fontSize: number
   scrollback: number
   theme: ThemeName
-  broadcast: boolean
   onSelect: (id: string) => void
   onClose: (id: string) => void
   onRestart: (session: SessionRuntime) => void
@@ -21,7 +20,6 @@ interface TerminalAreaProps {
   onInput: (id: string, data: string) => void
   onBell: (id: string) => void
   onCwdChange: (id: string, cwd: string) => void
-  onToggleBroadcast: () => void
 }
 
 const COLUMN_CHOICES = [
@@ -39,7 +37,6 @@ export function TerminalArea({
   fontSize,
   scrollback,
   theme,
-  broadcast,
   onSelect,
   onClose,
   onRestart,
@@ -47,11 +44,9 @@ export function TerminalArea({
   onReorder,
   onInput,
   onBell,
-  onCwdChange,
-  onToggleBroadcast
+  onCwdChange
 }: TerminalAreaProps) {
   const [zoomedId, setZoomedId] = useState<string | null>(null)
-  const [prompt, setPrompt] = useState('')
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [dropIndex, setDropIndex] = useState<number | null>(null)
   const gridRef = useRef<HTMLDivElement>(null)
@@ -84,12 +79,6 @@ export function TerminalArea({
 
   const cols = soloId ? 1 : grid.cols
   const remainder = n % cols
-
-  const sendPrompt = () => {
-    if (!prompt || !activeId) return
-    onInput(activeId, prompt + '\r')
-    setPrompt('')
-  }
 
   const startBoundaryDrag = (
     e: React.PointerEvent<HTMLDivElement>,
@@ -124,6 +113,9 @@ export function TerminalArea({
 
   return (
     <div className="terminal-area">
+      {/* With a single terminal there is nothing to arrange, so the bar stays out
+          of the way and the pane gets the space instead. */}
+      {n > 1 && (
       <div className="layout-bar">
         <div className="layout-modes" role="group" aria-label="Terminal düzeni">
           <button
@@ -221,6 +213,7 @@ export function TerminalArea({
           </div>
         )}
       </div>
+      )}
 
       <div
         className="terminal-grid"
@@ -313,38 +306,6 @@ export function TerminalArea({
           ))}
       </div>
 
-      <div className="prompt-bar">
-        <button
-          type="button"
-          className={`icon-btn broadcast-btn ${broadcast ? 'is-on' : ''}`}
-          title={
-            broadcast
-              ? 'Broadcast açık: girdi tüm terminallere gönderiliyor'
-              : 'Broadcast: girdiyi tüm terminallere gönder'
-          }
-          aria-pressed={broadcast}
-          onClick={onToggleBroadcast}
-        >
-          <Icon name="broadcast" size={15} />
-        </button>
-        <input
-          aria-label={broadcast ? 'Tüm terminallere gönder' : 'Aktif terminale gönder'}
-          value={prompt}
-          placeholder={
-            broadcast ? 'Tüm terminallere gönder…' : 'Aktif terminale gönder… (Enter)'
-          }
-          onChange={(e) => setPrompt(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              sendPrompt()
-            }
-          }}
-        />
-        <button type="button" className="btn btn-small" onClick={sendPrompt} disabled={!prompt}>
-          Gönder
-        </button>
-      </div>
     </div>
   )
 }

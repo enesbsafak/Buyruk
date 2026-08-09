@@ -97,42 +97,11 @@ function buildAiToolsUpdateScript(): string {
   return `${lines.join('\r')}\r`
 }
 
-function normalizePromptText(text: string): string {
-  return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-}
-
-// Multi-line prompts are wrapped in a bracketed-paste block so the AI CLIs treat
-// them as one paste instead of a burst of keystrokes. The whole payload goes out
-// as a single write: the main process queues it in order, so no timers are needed.
-function buildSubmittedTerminalPayload(session: SessionRuntime, data: string): string {
-  if (!data.endsWith('\r') || data.length <= 1) return data
-  const prompt = data.slice(0, -1)
-  if (!prompt) return '\r'
-
-  if (
-    session.type === 'claude' ||
-    session.type === 'codex' ||
-    session.type === 'opencode' ||
-    session.type === 'antigravity'
-  ) {
-    const pasted = `\x1b[200~${normalizePromptText(prompt)}\x1b[201~`
-    // Codex needs a second CR to submit after leaving paste mode.
-    return session.type === 'codex' ? `${pasted}\r\r` : `${pasted}\r`
-  }
-
-  return data
-}
-
-function writeSubmittedTerminalData(session: SessionRuntime, data: string): void {
-  window.api.writeTerminal(session.id, buildSubmittedTerminalPayload(session, data))
-}
-
 interface UiState {
   settingsOpen: boolean
   explorerNonce: number
   statusMessage: string
   recents: RecentFolder[]
-  broadcast: boolean
   gitStatus: GitStatus
   gitOverview: GitOverview
   gitPanelOpen: boolean
@@ -146,7 +115,6 @@ type UiAction =
   | { type: 'bump-explorer' }
   | { type: 'set-status-message'; message: string }
   | { type: 'set-recents'; recents: RecentFolder[] }
-  | { type: 'toggle-broadcast' }
   | { type: 'set-git-status'; gitStatus: GitStatus }
   | { type: 'set-git-overview'; gitOverview: GitOverview }
   | { type: 'toggle-git-panel' }
@@ -160,7 +128,6 @@ function createInitialUiState(): UiState {
     explorerNonce: 0,
     statusMessage: '',
     recents: loadRecents(),
-    broadcast: false,
     gitStatus: EMPTY_GIT,
     gitOverview: EMPTY_GIT_OVERVIEW,
     gitPanelOpen: false,
@@ -180,8 +147,6 @@ function uiReducer(state: UiState, action: UiAction): UiState {
       return { ...state, statusMessage: action.message }
     case 'set-recents':
       return { ...state, recents: action.recents }
-    case 'toggle-broadcast':
-      return { ...state, broadcast: !state.broadcast }
     case 'set-git-status':
       return { ...state, gitStatus: action.gitStatus }
     case 'set-git-overview':
@@ -211,13 +176,11 @@ function currentOpenFile(
 
 interface UseCommandListOptions {
   activeSession: SessionRuntime | null
-  broadcast: boolean
   settings: Settings
   onNewTerminal: (type: TerminalType) => void
   onOpenFolder: () => void
   onNewFolder: () => void
   onCloneRepo: () => void
-  onBroadcastPrompt: () => void
   onUpdateAiTools: () => void
   onSaveFile: () => void
   onCloseActive: () => void
@@ -228,13 +191,11 @@ interface UseCommandListOptions {
 
 function useCommandList({
   activeSession,
-  broadcast,
   settings,
   onNewTerminal,
   onOpenFolder,
   onNewFolder,
   onCloneRepo,
-  onBroadcastPrompt,
   onUpdateAiTools,
   onSaveFile,
   onCloseActive,
@@ -257,8 +218,6 @@ function useCommandList({
       { id: 'quick-open', label: 'Hızlı Dosya Aç', hint: 'Ctrl+P', icon: 'search', run: () => activeSession && dispatchUi({ type: 'set-quick-open', open: true }) },
       { id: 'save', label: 'Dosyayı Kaydet', hint: 'Ctrl+S', icon: 'save', run: onSaveFile },
       { id: 'close-term', label: 'Aktif Terminali Kapat', icon: 'close', run: onCloseActive },
-      { id: 'broadcast-send', label: 'Broadcast Gönder', icon: 'broadcast', run: onBroadcastPrompt },
-      { id: 'broadcast-mode', label: broadcast ? 'Broadcast Modunu Kapat' : 'Broadcast Modunu Aç', icon: 'broadcast', run: () => dispatchUi({ type: 'toggle-broadcast' }) },
       { id: 'theme', label: settings.theme === 'dark' ? 'Açık Temaya Geç' : 'Koyu Temaya Geç', icon: 'bolt', run: () => updateSettings({ ...settings, theme: settings.theme === 'dark' ? 'light' : 'dark' }) },
       { id: 'settings', label: 'Ayarlar', hint: 'Ctrl+,', icon: 'settings', run: () => dispatchUi({ type: 'set-settings-open', open: true }) }
     ]
@@ -273,13 +232,11 @@ function useCommandList({
     return list
   }, [
     activeSession,
-    broadcast,
     settings,
     onNewTerminal,
     onOpenFolder,
     onNewFolder,
     onCloneRepo,
-    onBroadcastPrompt,
     onUpdateAiTools,
     onSaveFile,
     onCloseActive,
@@ -331,7 +288,6 @@ interface TerminalControllerOptions {
   activeId: string | null
   activeSessionRef: { current: SessionRuntime | null }
   actions: ReturnType<typeof useSessions>['actions']
-  broadcast: boolean
   dialog: ReturnType<typeof useDialog>
   sessionsRef: { current: SessionRuntime[] }
   settings: Settings
@@ -342,47 +298,16 @@ function useTerminalController({
   activeId,
   activeSessionRef,
   actions,
-  broadcast,
   dialog,
   sessionsRef,
   settings,
   dispatchUi
 }: TerminalControllerOptions) {
   const bellThrottle = useRef<Record<string, number>>({})
-  const broadcastRef = useLatestRef(broadcast)
 
   const handleInput = useCallback((id: string, data: string) => {
-    if (broadcastRef.current) {
-      for (const session of sessionsRef.current) {
-        writeSubmittedTerminalData(session, data)
-      }
-    } else {
-      const session = sessionsRef.current.find((item) => item.id === id)
-      if (session) writeSubmittedTerminalData(session, data)
-      else window.api.writeTerminal(id, data)
-    }
-  }, [sessionsRef])
-
-  const handleBroadcastPrompt = useCallback(async () => {
-    const targets = sessionsRef.current
-    if (targets.length === 0) {
-      dialog.notify('Broadcast için açık terminal yok.', 'info')
-      return
-    }
-
-    const message = await dialog.prompt({
-      title: 'Broadcast Gönder',
-      label: `${targets.length} terminale gönder`,
-      placeholder: 'Komut veya prompt',
-      confirmText: 'Gönder'
-    })
-    if (!message) return
-
-    for (const session of targets) {
-      writeSubmittedTerminalData(session, `${message}\r`)
-    }
-    dispatchUi({ type: 'set-status-message', message: `${targets.length} terminale gönderildi` })
-  }, [dialog, dispatchUi, sessionsRef])
+    window.api.writeTerminal(id, data)
+  }, [])
 
   useEffect(() => {
     const offData = window.api.onTerminalData((id, data) => terminalBus.push(id, data))
@@ -585,7 +510,6 @@ function useTerminalController({
   return {
     handleInput,
     handleCwdChange,
-    handleBroadcastPrompt,
     handleNewTerminal,
     handleOpenRecent,
     handleCloneRepo,
@@ -1091,7 +1015,6 @@ function useAppModel() {
     explorerNonce,
     statusMessage,
     recents,
-    broadcast,
     gitStatus,
     gitOverview,
     gitPanelOpen,
@@ -1110,7 +1033,6 @@ function useAppModel() {
     () => dispatchUi({ type: 'set-settings-open', open: true }),
     []
   )
-  const toggleBroadcast = useCallback(() => dispatchUi({ type: 'toggle-broadcast' }), [])
   const toggleGitPanel = useCallback(() => dispatchUi({ type: 'toggle-git-panel' }), [])
   const closeQuickOpen = useCallback(() => dispatchUi({ type: 'set-quick-open', open: false }), [])
   const closePalette = useCallback(() => dispatchUi({ type: 'set-palette-open', open: false }), [])
@@ -1122,7 +1044,6 @@ function useAppModel() {
   const {
     handleInput,
     handleCwdChange,
-    handleBroadcastPrompt,
     handleNewTerminal,
     handleOpenRecent,
     handleCloneRepo,
@@ -1137,7 +1058,6 @@ function useAppModel() {
     activeId,
     activeSessionRef,
     actions,
-    broadcast,
     dialog,
     sessionsRef,
     settings,
@@ -1315,13 +1235,11 @@ function useAppModel() {
 
   const commands = useCommandList({
     activeSession,
-    broadcast,
     settings,
     onNewTerminal: handleNewTerminal,
     onOpenFolder: handleOpenFolder,
     onNewFolder: handleNewFolder,
     onCloneRepo: handleCloneRepo,
-    onBroadcastPrompt: handleBroadcastPrompt,
     onUpdateAiTools: handleUpdateAiTools,
     onSaveFile: saveActiveFile,
     onCloseActive: handleCloseActive,
@@ -1333,7 +1251,6 @@ function useAppModel() {
   return {
     activeId,
     activeSession,
-    broadcast,
     closePalette,
     closeQuickOpen,
     closeSettings,
@@ -1343,7 +1260,6 @@ function useAppModel() {
     gitOverview,
     gitPanelOpen,
     handleBell,
-    handleBroadcastPrompt,
     handleChangeContent,
     handleCheckForUpdates,
     handleCloseActive,
@@ -1384,7 +1300,6 @@ function useAppModel() {
     settings,
     settingsOpen,
     statusMessage,
-    toggleBroadcast,
     toggleGitPanel,
     updateStatus,
     setActiveSession: actions.setActive,

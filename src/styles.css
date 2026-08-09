@@ -562,24 +562,40 @@ button {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 10px 0;
-  min-height: 34px;
+  padding: 6px 10px;
+  min-height: 36px;
   overflow: hidden;
+  border-bottom: 1px solid var(--border);
 }
 .layout-modes {
   display: flex;
-  gap: 1px;
+  align-items: center;
+  gap: 2px;
   flex: 0 0 auto;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+}
+.layout-modes .seg-btn {
+  padding: 3px 8px;
+  font-size: 11.5px;
+}
+.seg-btn.is-on {
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 .layout-cols {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
+  flex: 0 0 auto;
 }
 .layout-hint {
   font-size: 11px;
   color: var(--text-muted);
   margin-right: 2px;
+  letter-spacing: 0.02em;
 }
 .chip {
   min-width: 26px;
@@ -711,90 +727,6 @@ button {
 }
 .pane-head[draggable='true']:active {
   cursor: grabbing;
-}
-.prompt-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
-  background: var(--bg-2);
-  border-top: 1px solid var(--border);
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-.prompt-bar input {
-  flex: 1;
-  min-width: 0;
-  background: var(--bg-0);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  padding: 6px 10px;
-  font-size: 12.5px;
-  font-family: var(--mono);
-}
-.prompt-bar input:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-.broadcast-btn {
-  position: relative;
-  overflow: visible;
-}
-.broadcast-btn.is-on {
-  color: var(--success);
-  background: rgba(158, 206, 106, 0.14);
-}
-.broadcast-btn.is-on:hover:not(:disabled) {
-  color: var(--success);
-  background: rgba(158, 206, 106, 0.2);
-}
-/* Radiating broadcast waves while the mode is active. */
-.broadcast-btn.is-on::before,
-.broadcast-btn.is-on::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  margin: auto;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: 1.5px solid var(--success);
-  opacity: 0;
-  pointer-events: none;
-  animation: broadcast-wave 1.8s ease-out infinite;
-}
-.broadcast-btn.is-on::after {
-  animation-delay: 0.9s;
-}
-.broadcast-btn.is-on svg {
-  animation: broadcast-pulse 1.8s ease-in-out infinite;
-}
-@keyframes broadcast-wave {
-  0% {
-    transform: scale(0.5);
-    opacity: 0.55;
-  }
-  100% {
-    transform: scale(2.4);
-    opacity: 0;
-  }
-}
-@keyframes broadcast-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .broadcast-btn.is-on::before,
-  .broadcast-btn.is-on::after,
-  .broadcast-btn.is-on svg {
-    animation: none;
-  }
 }
 .terminal-grid > div {
   min-width: 0;
@@ -1408,65 +1340,88 @@ button {
 }
 
 /* File-type tones — scannable without reading every name. */
-.tree-ico.tone-ts {
+.tree-ico.tone-ts,
+.tab-ico.tone-ts {
   color: #4a9eff;
 }
 .tree-ico.tone-js,
-.tree-ico.tone-npm {
+.tab-ico.tone-js,
+.tree-ico.tone-npm,
+.tab-ico.tone-npm {
   color: #e8c547;
 }
-.tree-ico.tone-py {
+.tree-ico.tone-py,
+.tab-ico.tone-py {
   color: #4b8bbe;
 }
-.tree-ico.tone-rust {
+.tree-ico.tone-rust,
+.tab-ico.tone-rust {
   color: #d98a5b;
 }
-.tree-ico.tone-go {
+.tree-ico.tone-go,
+.tab-ico.tone-go {
   color: #4ecdc4;
 }
 .tree-ico.tone-java,
-.tree-ico.tone-cs {
+.tab-ico.tone-java,
+.tree-ico.tone-cs,
+.tab-ico.tone-cs {
   color: #b07be0;
 }
-.tree-ico.tone-php {
+.tree-ico.tone-php,
+.tab-ico.tone-php {
   color: #8892bf;
 }
 .tree-ico.tone-ruby,
+.tab-ico.tone-ruby,
 .tree-ico.tone-vue,
-.tree-ico.tone-svelte {
+.tab-ico.tone-vue,
+.tree-ico.tone-svelte,
+.tab-ico.tone-svelte {
   color: #e06c75;
 }
-.tree-ico.tone-shell {
+.tree-ico.tone-shell,
+.tab-ico.tone-shell {
   color: #89d185;
 }
-.tree-ico.tone-html {
+.tree-ico.tone-html,
+.tab-ico.tone-html {
   color: #e8834a;
 }
-.tree-ico.tone-css {
+.tree-ico.tone-css,
+.tab-ico.tone-css {
   color: #56b6c2;
 }
-.tree-ico.tone-data {
+.tree-ico.tone-data,
+.tab-ico.tone-data {
   color: #e0af68;
 }
-.tree-ico.tone-doc {
+.tree-ico.tone-doc,
+.tab-ico.tone-doc {
   color: #9aa5ce;
 }
-.tree-ico.tone-media {
+.tree-ico.tone-media,
+.tab-ico.tone-media {
   color: #bb9af7;
 }
-.tree-ico.tone-archive {
+.tree-ico.tone-archive,
+.tab-ico.tone-archive {
   color: #c0a36e;
 }
-.tree-ico.tone-git {
+.tree-ico.tone-git,
+.tab-ico.tone-git {
   color: #f0883e;
 }
-.tree-ico.tone-docker {
+.tree-ico.tone-docker,
+.tab-ico.tone-docker {
   color: #4a9eff;
 }
-.tree-ico.tone-env {
+.tree-ico.tone-env,
+.tab-ico.tone-env {
   color: #e0af68;
 }
-.tree-ico.tone-muted {
+.tree-ico.tone-muted,
+.tab-ico.tone-muted {
   color: var(--text-muted);
 }
 .tree-row:hover {
